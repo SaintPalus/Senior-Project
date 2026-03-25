@@ -1,0 +1,52 @@
+# Anaconda / Python environments
+Anaconda/
+C:/tf_gpu/
+
+# Dataset (audio files)
+SeniorP1/dataset/
+SeniorP1/SeniorP1/dataset/
+**/dataset/
+**/*.wav
+**/*.mp3
+**/*.flac
+**/*.ogg
+**/*.m4a
+
+# Extracted features (numpy arrays)
+SeniorP1/extracted_features/
+**/extracted_features/
+**/*.npy
+
+# Trained models
+**/*.h5
+**/*.keras
+asian_emotion_cnn_model.h5
+Backup Model/
+
+# Encoders / Scalers
+**/*.pkl
+
+# Archives & Installers
+**/*.rar
+**/*.zip
+**/*.exe
+
+# Python cache
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Jupyter
+.ipynb_checkpoints/
+**/.ipynb_checkpoints/
+*.ipynb
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
