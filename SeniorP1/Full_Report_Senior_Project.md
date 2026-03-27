@@ -741,87 +741,156 @@ with open('scaler.pkl', 'wb') as f:
 
 ## 4.1 ภาพรวมการออกแบบ (Overview Design)
 
-### 4.1.1 โครงสร้างไฟล์โปรแกรม
+### 4.1.1 คำอธิบายการทำงานของแต่ละไฟล์ Python
 
-```
-SeniorP1/รวมภาษา Ai/
-│
-├── [เครื่องมือตรวจสอบ]
-│   ├── Check Gpu.py           ← ตรวจสอบ GPU / TensorFlow Version
-│   └── Check_Data_Reader.py   ← นับจำนวนไฟล์เสียงในแต่ละ Class
-│
-├── [เตรียมข้อมูล]
-│   ├── Label.py               ← ดาวน์โหลด Korean Dataset จาก Hugging Face
-│   └── Repair_Scaler.py       ← สร้าง StandardScaler ย้อนหลังจาก Dataset
-│
-├── [Training]
-│   ├── Train_Universal_Super.py   ← โมเดลหลัก (MFCC 40, เร็วที่สุด)
-│   ├── Train_Test.py              ← Anti-Leakage Strict Mode
-│   ├── Train_Model_RTX3060.py     ← High-Resolution (MFCC 128 + Mel)
-│   └── Train_model_res.py         ← High-Resolution, Low VRAM Version
-│
-├── [Inference / Testing]
-│   └── Test_Real_World.py     ← ทดสอบไฟล์เสียงเดียว (Real-world Test)
-│
-└── Test modle/
-    ├── Test_Final.py          ← Interactive Test (Universal Model)
-    ├── Test_Super_Model.py    ← Interactive Test with Safety Logic
-    ├── Evaluate_Model.py      ← Batch Evaluation (Instance Normalization)
-    └── Evaluate_Fix_Final.py  ← Batch Evaluation (Rebuilt Scaler Method)
-```
+&emsp;โครงงานนี้ประกอบด้วยไฟล์ Python ทั้งหมด 10 ไฟล์ แบ่งตามบทบาทหน้าที่ออกเป็น 4 กลุ่ม ดังนี้
 
-### 4.1.2 Model Summary
+---
 
-```
-Model: CNN + Bidirectional LSTM (Super Universal Model)
-Total Parameters: 653,061 (ทั้งหมดเป็น Trainable)
-─────────────────────────────────────────────────────────
-Layer                      Output Shape         Params
-─────────────────────────────────────────────────────────
-Conv1D (256, kernel=5)     (None, 130, 256)      51,456
-BatchNormalization          (None, 130, 256)       1,024
-MaxPooling1D (pool=2)       (None,  65, 256)           0
-Dropout (0.3)               (None,  65, 256)           0
-─────────────────────────────────────────────────────────
-Conv1D (128, kernel=5)      (None,  65, 128)     163,968
-BatchNormalization           (None,  65, 128)         512
-MaxPooling1D (pool=2)        (None,  32, 128)           0
-Dropout (0.3)                (None,  32, 128)           0
-─────────────────────────────────────────────────────────
-Bidirectional LSTM (128)     (None,  32, 256)     263,168
-Dropout (0.3)                (None,  32, 256)           0
-─────────────────────────────────────────────────────────
-Bidirectional LSTM (64)      (None,      128)     164,352
-Dropout (0.3)                (None,      128)           0
-─────────────────────────────────────────────────────────
-Dense (64, ReLU, L2)         (None,       64)       8,256
-Dropout (0.3)                (None,       64)           0
-Dense (5, Softmax)            (None,        5)         325
-─────────────────────────────────────────────────────────
-```
+**กลุ่มที่ 1 — เครื่องมือตรวจสอบระบบ (Diagnostic Tools)**
 
-### 4.1.3 ลำดับการรันระบบ
+**1. Check Gpu.py**
 
-```bash
-# 1. ตรวจสอบ GPU และ TensorFlow
-python "Check Gpu.py"
+&emsp;ไฟล์นี้มีหน้าที่ตรวจสอบว่าสภาพแวดล้อมการทำงานมี GPU พร้อมใช้งานหรือไม่ก่อนเริ่ม Training โดย Import `tensorflow` แล้วเรียก `tf.config.list_physical_devices('GPU')` เพื่อรับรายการ GPU ทั้งหมดที่ TensorFlow มองเห็น หากพบ GPU จะแสดงชื่อและจำนวน GPU พร้อมแจ้งว่าพร้อมรันแบบ Turbo (ใช้ GPU Acceleration) หากไม่พบ GPU จะแสดงข้อความเตือนและแนะนำให้ตรวจสอบการติดตั้ง CUDA/cuDNN โดยที่ไฟล์นี้ไม่ได้โหลด Dataset หรือสร้างโมเดลใดๆ ทำงานเสร็จภายในไม่กี่วินาที
 
-# 2. ตรวจสอบ Dataset ว่าครบและสมดุลหรือไม่
-python "Check_Data_Reader.py"
+**2. Check\_Data\_Reader.py**
 
-# 3. เทรนโมเดล (เลือกอย่างใดอย่างหนึ่งตามทรัพยากร)
-python "Train_Universal_Super.py"      # แนะนำ: เร็ว + ประหยัด
-python "Train_Model_RTX3060.py"        # สำหรับ Accuracy สูงสุด
+&emsp;ไฟล์นี้ทำหน้าที่สแกนโฟลเดอร์ `dataset/` แบบ Recursive แล้วนับจำนวนไฟล์เสียงในแต่ละ Class อารมณ์ โดยวน Loop ผ่านทุกโฟลเดอร์ย่อย ตรวจสอบว่าชื่อโฟลเดอร์ตรงกับคำสำคัญอารมณ์ใดหรือไม่ (angry / happy / sad / neutral / surprise) แล้วนับจำนวนไฟล์ `.wav`, `.mp3`, `.flac` ที่พบในโฟลเดอร์นั้น สรุปผลออกมาเป็นตารางแสดงจำนวนไฟล์แยกตามอารมณ์และยอดรวม ใช้ก่อนเริ่ม Training เพื่อตรวจสอบว่า Dataset สมดุล (Balanced) หรือไม่ และ Path ถูกต้องหรือไม่
 
-# 4. (ถ้าจำเป็น) สร้าง Scaler ย้อนหลัง
-python "Repair_Scaler.py"
+---
 
-# 5. ทดสอบแบบ Interactive
-python "Test modle/Test_Final.py"
+**กลุ่มที่ 2 — เตรียมข้อมูล (Data Preparation)**
 
-# 6. ประเมินผลจริงแบบ Batch
-python "Test modle/Evaluate_Fix_Final.py"
-```
+**3. Label.py**
+
+&emsp;ไฟล์นี้ทำหน้าที่ดาวน์โหลด Korean Voice Emotion Dataset จาก Hugging Face และจัดเก็บลงโฟลเดอร์ในเครื่อง โดยใช้ Library `datasets` ของ Hugging Face โหลดข้อมูลแบบ Streaming Mode เพื่อประหยัด RAM เนื่องจากไม่ต้องโหลดทั้ง Dataset เข้า Memory พร้อมกัน ปิดการถอดรหัสอัตโนมัติด้วย `Audio(decode=False)` เพื่อหลีกเลี่ยงปัญหา Codec จากนั้นวนลูปรับข้อมูลทีละรายการ ดึง Emotion Label จากคอลัมน์ `emotion` หรือ `label` แล้วถอดรหัสเสียงด้วย `soundfile.read()` จาก bytes โดยตรง สร้างโฟลเดอร์แยกตามชื่ออารมณ์ (เช่น `dataset/korean_drama/angry/`) และบันทึกไฟล์ `.wav` ในรูปแบบ `kor_clip_XXXX.wav` เพื่อให้ระบบ Label Detection ในขั้นตอน Training สามารถอ่าน Label จาก Path ได้อัตโนมัติ
+
+**4. Repair\_Scaler.py**
+
+&emsp;ไฟล์นี้สร้างขึ้นเพื่อแก้ปัญหาเฉพาะที่พบระหว่างการพัฒนา กล่าวคือเมื่อ Train โมเดลเสร็จแล้วแต่ไฟล์ `super_scaler.pkl` หายหรือ Corrupt ทำให้ไม่สามารถ Evaluate โมเดลได้ ไฟล์นี้จึงสร้าง Scaler ใหม่โดยไม่ต้อง Retrain โมเดล โดยอ่านไฟล์เสียงทุกไฟล์ใน `dataset/` สกัด MFCC 40 Coefficients จากทุกไฟล์ รวม Feature ทั้งหมดแล้ว `fit` StandardScaler บนข้อมูลรวม และบันทึกเป็น `super_scaler.pkl` อย่างไรก็ตามมีข้อควรระวังคือ Scaler ที่สร้างด้วยวิธีนี้ Fit บนข้อมูลรวมทั้งหมด (ไม่ใช่เฉพาะ Train Set) ซึ่งถือว่ามี Leakage เล็กน้อย จึงควรใช้เฉพาะเมื่อ Scaler ต้นฉบับสูญหายเท่านั้น
+
+---
+
+**กลุ่มที่ 3 — Training โมเดล (Model Training)**
+
+**5. Train\_Universal\_Super.py** *(โมเดลหลักที่แนะนำ)*
+
+&emsp;ไฟล์นี้เป็นโมเดลหลักที่ใช้ในโครงงาน ใช้ Feature เป็น MFCC 40 Coefficients ซึ่งเบาและเร็วที่สุด กระบวนการทำงานเริ่มจากสแกนไฟล์ทั้งหมดใน Dataset → ตรวจจับ Label → โหลดและ Preprocess เสียง (Trim + Pad/Cut) → สกัด MFCC → สร้าง Data Augmentation เฉพาะ Train Set (Noise / Pitch / Time) → แบ่ง Train/Val/Test → Fit StandardScaler บน Train → Train โมเดล CNN + Bi-LSTM พร้อม EarlyStopping และ ReduceLROnPlateau → บันทึกโมเดลที่ดีที่สุด เมื่อ Training เสร็จจะแสดงกราฟ Accuracy/Loss และ Confusion Matrix โดยอัตโนมัติ ผลลัพธ์คือไฟล์ `super_model_multilingual.keras`, `super_label_encoder.pkl` และ `super_scaler.pkl`
+
+**6. Train\_Test.py** *(Anti-Data-Leakage Strict Mode)*
+
+&emsp;ไฟล์นี้มีสถาปัตยกรรมเหมือนกับ `Train_Universal_Super.py` แต่เพิ่มความเข้มงวดในการป้องกัน Data Leakage โดยทำการ Split File Paths ก่อนทุกกระบวนการอย่างเคร่งครัด และบังคับให้ Augmentation ทำเฉพาะกับ `train_files` เท่านั้นก่อนจะโหลดข้อมูล ไม่ใช่ Augment หลังจากโหลดแล้วค่อย Split เหมาะสำหรับการทดลองที่ต้องการความเชื่อถือได้ของผลประเมินสูงสุด
+
+**7. Train\_Model\_RTX3060.py** *(High-Resolution)*
+
+&emsp;ไฟล์นี้ใช้ Feature Resolution สูงกว่าโดยรวม MFCC 128 Coefficients และ Mel Spectrogram 128 Bins เข้าด้วยกัน ได้ Feature Vector ขนาด (T, 256) ต่อ Time Step ทำให้โมเดลมีข้อมูล Spectral ที่ละเอียดมากขึ้น นอกจากนี้ยังเปิดใช้งาน Mixed Precision (float16) เพื่อใช้ประโยชน์จาก Tensor Cores บน RTX 3060 ช่วยให้ Training เร็วขึ้นประมาณ 30-50% โดยที่ Accuracy ไม่ลดลง เหมาะสำหรับกรณีที่ต้องการ Accuracy สูงสุดและมี VRAM เพียงพอ (ต้องการ VRAM ประมาณ 8-10 GB)
+
+**8. Train\_model\_res.py** *(High-Resolution, Low VRAM)*
+
+&emsp;ไฟล์นี้มีสถาปัตยกรรมเหมือนกับ `Train_Model_RTX3060.py` แต่ลด Batch Size เหลือ 16 เพื่อให้ทำงานได้บนเครื่องที่มี VRAM จำกัด Trade-off คือ Training ช้ากว่าเนื่องจาก Gradient Update บ่อยขึ้น แต่บางครั้ง Batch Size เล็กช่วยให้ Generalize ได้ดีขึ้นเล็กน้อย
+
+---
+
+**กลุ่มที่ 4 — ทดสอบและประเมินผล (Testing and Evaluation)**
+
+**9. Test\_Real\_World.py** *(Single File Test)*
+
+&emsp;ไฟล์นี้ออกแบบมาสำหรับทดสอบไฟล์เสียงไฟล์เดียวอย่างรวดเร็ว โดยกำหนด Path ของไฟล์ทดสอบไว้ใน Code โดยตรง (`TEST_FILE`) ใช้ Instance Normalization แทน StandardScaler (คำนวณ Mean/Std จากไฟล์เดียวนั้น) เพราะออกแบบมาให้ใช้ง่ายโดยไม่ต้องพึ่งไฟล์ `.pkl` แสดงผลลัพธ์เป็นอารมณ์ที่ทำนาย, ค่าความมั่นใจ (Confidence %) และ Probability Bar Chart ของทุกอารมณ์ในรูปแบบ Text
+
+**10. Test\_Final.py** *(Interactive Test Loop)*
+
+&emsp;ไฟล์นี้ทำงานเป็น Interactive Loop รอรับ Path ไฟล์เสียงจากผู้ใช้ผ่านทาง Terminal สามารถลาก-วางไฟล์จาก File Explorer มาที่ Terminal ได้โดยตรง ผู้ใช้สามารถทดสอบไฟล์เสียงได้หลายไฟล์ต่อเนื่องโดยไม่ต้องรีสตาร์ทโปรแกรม ใช้ Instance Normalization เช่นเดียวกับ `Test_Real_World.py` แต่ไม่มี Safety Logic พิมพ์ `q` เพื่อออกจากโปรแกรม
+
+**11. Test\_Super\_Model.py** *(Interactive Test + Safety Logic)*
+
+&emsp;ไฟล์นี้ทำงานคล้ายกับ `Test_Final.py` แต่เพิ่ม **Safety Logic** พิเศษ กล่าวคือหากโมเดลทำนายว่าเป็นอารมณ์ Happy แต่ Confidence ต่ำกว่า 80% ระบบจะปรับเปลี่ยนคำตอบให้เป็น Neutral แทน เหตุผลที่ทำเช่นนี้เพราะจากการทดสอบพบว่า Happy และ Surprise มีการสับสนกันสูง และการทำนายว่า Happy ที่มีความมั่นใจต่ำมักจะเป็นผลลัพธ์ที่ผิดพลาด การเปลี่ยนเป็น Neutral ถือว่า "ปลอดภัยกว่า" ในแง่ของการนำไปใช้งานจริง ไฟล์นี้ยังโหลด StandardScaler จากไฟล์ `.pkl` ด้วย ทำให้ Normalization ถูกต้องตรงกับตอน Training
+
+**12. Evaluate\_Model.py** *(Batch Evaluation — Instance Normalization)*
+
+&emsp;ไฟล์นี้ทำการประเมินผลโมเดลแบบ Batch โดยโหลดไฟล์เสียงทุกไฟล์ใน Test Set (20% ที่แบ่งไว้ด้วย `random_state=42`) มา Predict พร้อมกัน ใช้ Instance Normalization (ไม่ใช้ Scaler จากไฟล์ `.pkl`) เหมาะสำหรับกรณีที่ Scaler สูญหาย แต่ข้อเสียคือ Normalization ไม่ตรงกับตอน Training ทำให้ผล Accuracy อาจคลาดเคลื่อน แสดงผลเป็น Classification Report (Precision / Recall / F1) และ Confusion Matrix Heatmap
+
+**13. Evaluate\_Fix\_Final.py** *(Batch Evaluation — Rebuilt Scaler)* **[แนะนำ]**
+
+&emsp;ไฟล์นี้เป็นวิธีประเมินผลที่แม่นยำที่สุด โดยแก้ปัญหา Scaler Mismatch ด้วยการ Rebuild Scaler จาก Training Set ก่อนทำการ Evaluate รายละเอียดกระบวนการคือ รวบรวมไฟล์ทั้งหมด → เรียงลำดับด้วย `.sort()` (สำคัญมากเพื่อให้ได้ผล Split เหมือนเดิมทุกครั้ง) → Split เป็น Train/Test ด้วย `random_state=42` เหมือนตอน Training → โหลดข้อมูล Train Set มา Fit StandardScaler ใหม่ → ลบ Train Data ออกจาก Memory (`del X_train_dummy`) → โหลดข้อมูล Test Set → Transform ด้วย Scaler ใหม่ → Predict และแสดงผล การที่ต้องเรียง `.sort()` ก่อน Split เพราะหาก File Order ต่างออกไป แม้จะใช้ `random_state=42` เหมือนกัน ก็จะได้ Train/Test Split ต่างกัน ทำให้ Scaler ที่ Fit มาไม่ตรงกับ Training จริง
+
+### 4.1.2 รายละเอียด Parameter ของโมเดล
+
+&emsp;โมเดล CNN + Bidirectional LSTM ที่พัฒนาขึ้นมีจำนวน Parameter ที่ Trainable ได้ทั้งหมด **653,061 ตัว** ซึ่งถือว่าเป็นขนาดที่เหมาะสม ไม่ใหญ่เกินไปจนเกิด Overfitting และไม่เล็กเกินไปจนสูญเสียความสามารถในการเรียนรู้ ตารางด้านล่างแสดงจำนวน Parameter ในแต่ละชั้น พร้อมสัดส่วนที่ชั้นนั้นใช้จากทั้งโมเดล
+
+**ตารางที่ 4.0 จำนวน Parameter แยกตามชั้น**
+
+| ชั้น (Layer) | Output Shape | Parameters | สัดส่วน (%) | หมายเหตุ |
+|---|---|---|---|---|
+| Conv1D (256, kernel=5) | (None, 130, 256) | 51,456 | 7.9% | ถ่วงน้ำหนัก 40×5×256 + Bias |
+| BatchNormalization | (None, 130, 256) | 1,024 | 0.2% | γ และ β สำหรับ 256 Feature |
+| MaxPooling1D | (None, 65, 256) | 0 | — | ไม่มี Parameter |
+| Dropout (0.3) | (None, 65, 256) | 0 | — | ไม่มี Parameter |
+| Conv1D (128, kernel=5) | (None, 65, 128) | 163,968 | 25.1% | ถ่วงน้ำหนัก 256×5×128 + Bias |
+| BatchNormalization | (None, 65, 128) | 512 | 0.1% | γ และ β สำหรับ 128 Feature |
+| MaxPooling1D | (None, 32, 128) | 0 | — | ไม่มี Parameter |
+| Dropout (0.3) | (None, 32, 128) | 0 | — | ไม่มี Parameter |
+| Bidirectional LSTM (128) | (None, 32, 256) | 263,168 | **40.3%** | ชั้นที่มี Parameter มากที่สุด |
+| Dropout (0.3) | (None, 32, 256) | 0 | — | ไม่มี Parameter |
+| Bidirectional LSTM (64) | (None, 128) | 164,352 | 25.2% | สรุปเป็น Vector 128 มิติ |
+| Dropout (0.3) | (None, 128) | 0 | — | ไม่มี Parameter |
+| Dense (64, ReLU, L2) | (None, 64) | 8,256 | 1.3% | 128×64 + 64 Bias |
+| Dropout (0.3) | (None, 64) | 0 | — | ไม่มี Parameter |
+| Dense (5, Softmax) | (None, 5) | 325 | 0.1% | 64×5 + 5 Bias |
+| **รวมทั้งหมด** | | **653,061** | **100%** | Trainable ทั้งหมด |
+
+&emsp;สังเกตได้ว่า Bidirectional LSTM ชั้นแรกใช้ Parameter มากที่สุดถึง 40.3% ของโมเดลทั้งหมด เนื่องจาก LSTM มี Gate Mechanism ที่ซับซ้อน (Input Gate, Forget Gate, Output Gate, Cell State) และ Bidirectional ทำให้จำนวน Parameter เพิ่มเป็น 2 เท่าของ Unidirectional LSTM สูตรการคำนวณ Parameter ของ LSTM คือ `4 × [(input_dim + hidden_dim) × hidden_dim + hidden_dim]` ซึ่งสำหรับ BiLSTM(128) ที่รับ Input ขนาด 128 จาก CNN คือ `2 × 4 × [(128 + 128) × 128 + 128] = 263,168`
+
+### 4.1.3 ลำดับการรันระบบและเงื่อนไขการใช้งาน
+
+&emsp;การรันระบบต้องทำตามลำดับที่กำหนดอย่างเคร่งครัด เพราะแต่ละขั้นตอนพึ่งพาผลลัพธ์จากขั้นก่อนหน้า รายละเอียดแต่ละขั้นตอนมีดังนี้
+
+**ขั้นตอนที่ 1 — ตรวจสอบ GPU และ TensorFlow (บังคับ)**
+
+&emsp;ก่อนเริ่มทุกอย่างต้องตรวจสอบว่า TensorFlow มองเห็น GPU หรือไม่ เพราะหาก Training รันบน CPU ใช้เวลานานกว่า GPU ประมาณ 10-30 เท่า หาก Check GPU ผ่านจึงดำเนินการต่อ หากไม่ผ่านต้องแก้ปัญหาการติดตั้ง CUDA/cuDNN ก่อน
+
+**ขั้นตอนที่ 2 — ดาวน์โหลด Korean Dataset (ทำครั้งเดียว)**
+
+&emsp;รัน `Label.py` เพื่อดาวน์โหลดข้อมูล Korean Voice Emotion Dataset จาก Hugging Face ขั้นตอนนี้ต้องใช้อินเทอร์เน็ตและอาจใช้เวลานาน ทำเพียงครั้งเดียว ผลลัพธ์คือโฟลเดอร์ `dataset/korean_drama/` ที่มีไฟล์เสียงแยกตามอารมณ์
+
+**ขั้นตอนที่ 3 — ตรวจสอบ Dataset (แนะนำ)**
+
+&emsp;รัน `Check_Data_Reader.py` เพื่อยืนยันว่า Dataset มีไฟล์ครบทั้ง 5 Class และจำนวนไฟล์ในแต่ละ Class ไม่ต่างกันมากเกินไป (Class ไหน Dataset น้อยกว่ามากจะทำให้โมเดล Bias) หากพบ Class ที่มีข้อมูลน้อยควรหาข้อมูลเพิ่มก่อน Training
+
+**ขั้นตอนที่ 4 — เทรนโมเดล (เลือกตามทรัพยากร)**
+
+&emsp;เลือกไฟล์ Training ตามความพร้อมของ Hardware ดังนี้
+
+| เงื่อนไข | ไฟล์ที่แนะนำ | เหตุผล |
+|---|---|---|
+| VRAM ≥ 8 GB, ต้องการ Accuracy สูงสุด | `Train_Model_RTX3060.py` | MFCC 128 + Mel ให้ข้อมูลละเอียดกว่า |
+| VRAM 4-8 GB หรือต้องการความเร็ว | `Train_Universal_Super.py` | MFCC 40 เร็วกว่า ใช้ VRAM น้อยกว่า |
+| VRAM น้อยกว่า 4 GB | `Train_model_res.py` | Batch=16 ลด VRAM ที่ต้องใช้ |
+| ต้องการผลประเมินที่เชื่อถือได้สูงสุด | `Train_Test.py` | Anti-Leakage เข้มงวดที่สุด |
+
+&emsp;ระหว่าง Training โปรแกรมจะแสดง Log แต่ละ Epoch และ EarlyStopping จะหยุด Training โดยอัตโนมัติเมื่อ Validation Loss ไม่ดีขึ้นติดต่อกัน 10-12 Epoch ผลลัพธ์คือไฟล์ `.keras`, `.pkl` (Label Encoder) และ `.pkl` (Scaler)
+
+**ขั้นตอนที่ 5 — สร้าง Scaler ย้อนหลัง (เฉพาะกรณีฉุกเฉิน)**
+
+&emsp;รัน `Repair_Scaler.py` เฉพาะกรณีที่ไฟล์ Scaler (`.pkl`) หายหรือเสียหาย ไม่ควรรันโดยไม่จำเป็นเพราะ Scaler ที่ได้จะ Fit บนข้อมูลรวมทั้งหมด ไม่ใช่เฉพาะ Train Set ซึ่งมี Leakage เล็กน้อย
+
+**ขั้นตอนที่ 6 — ทดสอบแบบ Interactive (ทดสอบไฟล์เดียว)**
+
+&emsp;เลือกไฟล์ Test ตามจุดประสงค์
+
+| จุดประสงค์ | ไฟล์ที่ใช้ |
+|---|---|
+| ทดสอบไฟล์เดียวอย่างรวดเร็ว (ไม่ต้องมี Scaler) | `Test_Real_World.py` |
+| ทดสอบหลายไฟล์ต่อเนื่อง (ไม่ต้องมี Scaler) | `Test_Final.py` |
+| ทดสอบหลายไฟล์ต่อเนื่อง + Safety Logic (ต้องมี Scaler) | `Test_Super_Model.py` |
+
+**ขั้นตอนที่ 7 — ประเมินผลแบบ Batch (วัดประสิทธิภาพจริง)**
+
+&emsp;เลือกไฟล์ Evaluate ตามสถานการณ์
+
+| สถานการณ์ | ไฟล์ที่ใช้ | ความแม่นยำของผล |
+|---|---|---|
+| มี Scaler ต้นฉบับหายหรือไม่แน่ใจ | `Evaluate_Fix_Final.py` | สูงสุด (Rebuild Scaler) |
+| ไม่มี Scaler เลย (Scaler หาย) | `Evaluate_Model.py` | ต่ำกว่าเล็กน้อย (Instance Norm) |
 
 ## 4.2 ผลการทดลองและการวิเคราะห์ปัญหา
 
@@ -829,15 +898,33 @@ python "Test modle/Evaluate_Fix_Final.py"
 
 **ตารางที่ 4.1 ผลการทดลองของ Multilingual Unified Model**
 
-| Metric | ค่าที่ได้ | เป้าหมาย | ผ่าน? | หมายเหตุ |
+| Metric | ค่าที่ได้ | เป้าหมาย | ผ่าน? | การวิเคราะห์ |
 |---|---|---|---|---|
-| Train Accuracy | ~85% | ≥ 80% | ✅ | โมเดลเรียนรู้ข้อมูล Train ได้ดี |
-| Validation Accuracy | ~72% | ≥ 75% | ❌ | ต่ำกว่าเป้าหมาย 3% |
-| Test Accuracy | ~68% | ≥ 75% | ❌ | ต่ำกว่าเป้าหมาย 7% |
-| Train-Val Gap | ~13% | < 10% | ❌ | แสดงอาการ Overfitting |
-| Training Epochs | ~45-60 | — | — | EarlyStopping ทำงาน |
+| Train Accuracy | ~85% | ≥ 80% | ✅ | โมเดลเรียนรู้ข้อมูล Train ได้ดีเกินไปจนอาจ Overfit |
+| Validation Accuracy | ~72% | ≥ 75% | ❌ | ต่ำกว่าเป้าหมาย 3% บ่งชี้ Generalization ไม่ดี |
+| Test Accuracy | ~68% | ≥ 75% | ❌ | ต่ำกว่าเป้าหมาย 7% ผลที่แท้จริงของการ Overfit |
+| Train-Val Gap | ~13% | < 10% | ❌ | Gap สูง = Overfitting ชัดเจน |
+| Training Epochs | ~45-60 | — | — | EarlyStopping หยุด Train ก่อน Max Epoch |
 
-**การวิเคราะห์เบื้องต้น:** Gap ระหว่าง Train Accuracy (85%) กับ Test Accuracy (68%) ที่สูงถึง 17% บ่งชี้ว่าโมเดลกำลัง Overfit กับข้อมูลหรือ Domain ใดโดเมนหนึ่งอย่างชัดเจน
+**การวิเคราะห์ผลเชิงลึก:**
+
+&emsp;ผลที่ได้จากการทดลองมีความน่าสนใจในหลายมิติ ซึ่งสามารถอธิบายเหตุผลที่ทำให้ตัวเลขเป็นเช่นนี้ได้ดังต่อไปนี้
+
+**เหตุผลที่ Train Accuracy สูงถึง 85% แต่ Test Accuracy ต่ำเพียง 68%:**
+
+&emsp;ความแตกต่างระหว่าง Train Accuracy (85%) และ Test Accuracy (68%) ที่ห่างกันถึง **17%** เป็นสัญญาณที่ชัดเจนของ Overfitting ซึ่งในกรณีนี้ไม่ได้เกิดจาก Overfitting ทั่วไป (โมเดลจำข้อมูล Train แบบ Memorization) แต่เกิดจาก **Language Bias Overfitting** กล่าวคือโมเดลเรียนรู้รูปแบบ Prosody ของภาษาอังกฤษได้ดีมาก เพราะ RAVDESS มีข้อมูลมากกว่าและมีคุณภาพสูงกว่า แต่เมื่อต้องทำนายเสียงภาษาเกาหลีซึ่งมี Prosody แตกต่างกันสิ้นเชิง โมเดลจึงทำผิดพลาดบ่อย ผลลัพธ์จริงที่เกิดขึ้นคือ Accuracy บนไฟล์ภาษาอังกฤษอาจสูงถึงประมาณ 80-82% แต่บนไฟล์ภาษาเกาหลีอาจต่ำเพียง 50-55% เมื่อเฉลี่ยรวมกันจึงได้ Test Accuracy รวมประมาณ 68%
+
+**เหตุผลที่ EarlyStopping หยุดที่ Epoch ~45-60 จากสูงสุด 100:**
+
+&emsp;โมเดลเริ่ม Overfit ตั้งแต่ประมาณ Epoch ที่ 35-40 ซึ่งสังเกตได้จาก Validation Loss ที่เริ่มเพิ่มขึ้นแม้ Training Loss ยังคงลดลงต่อเนื่อง EarlyStopping จะ Restore Weights ของ Epoch ที่ดีที่สุดกลับมา และหยุดเมื่อ Validation Loss ไม่ดีขึ้นติดต่อกัน 10-12 Epoch ดังนั้น Epoch ~45-60 ที่รายงานคือจำนวน Epoch ที่รันจริง ส่วน Weights ที่ใช้จริงอาจมาจาก Epoch ที่ 37-42 ซึ่งเป็น Best Epoch
+
+**เหตุผลที่ Val Accuracy (72%) สูงกว่า Test Accuracy (68%):**
+
+&emsp;ในการ Train โมเดลมีการปรับ Hyperparameter (เช่น ReduceLROnPlateau) โดยอ้างอิงจาก Validation Loss ซึ่งทำให้โมเดลเกิดการ Indirect Optimization บน Validation Set เล็กน้อย (Model Selection Bias) ในขณะที่ Test Set ไม่เคยถูกใช้ในกระบวนการ Training หรือ Validation เลย Test Set จึงเป็นตัวแทนที่แท้จริงของข้อมูลในโลกจริง และให้ค่า Accuracy ที่ต่ำกว่า Val เล็กน้อยซึ่งถือเป็นเรื่องปกติ
+
+**เหตุผลที่ Training หยุดก่อนครบ 100 Epoch ทำให้ Loss ยังไม่ถึง Minimum:**
+
+&emsp;แม้ EarlyStopping จะช่วยป้องกัน Overfitting ได้ แต่การที่ Gap ระหว่าง Train/Val ยังสูงถึง 13% บ่งบอกว่าปัญหาหลักไม่ใช่เรื่อง Training ยาวหรือสั้นเกินไป แต่เป็นเรื่อง Fundamental Dataset Problem ที่ข้อมูลสองภาษามี Distribution ต่างกันมากเกินกว่าที่โมเดลเดียวจะ Generalize ได้พร้อมกัน ต่อให้ Train นานกว่านี้หรือปรับ Architecture ก็จะยังคงประสบปัญหา Prosody Mismatch อยู่
 
 ### 4.2.2 การวิเคราะห์ Confusion Matrix
 
