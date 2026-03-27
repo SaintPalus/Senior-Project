@@ -12,11 +12,13 @@ sys.stdout.reconfigure(encoding='utf-8')
 # ⚙️ 1. CONFIGURATION
 # ==========================================
 # 👇 ใส่ชื่อไฟล์เสียงที่คุณต้องการทดสอบตรงนี้
-TEST_FILE = r"C:\Users\THINK_01\66070131_SeniorP1\SeniorP1\dataset\angry\OAF_back_angry.wav" 
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+TEST_FILE = os.path.join(os.path.dirname(CURRENT_DIR), "dataset", "angry", "OAF_back_angry.wav")
 # (หรือจะเปลี่ยนเป็นไฟล์เสียงของคุณเองที่อัดใหม่ก็ได้ครับ)
 
-MODEL_PATH = "real_acc_model.keras"
-LABEL_PATH = "label_encoder.pkl"
+MODEL_PATH  = os.path.join(CURRENT_DIR, "ultimate_model_rtx.keras")
+SCALER_PATH = os.path.join(CURRENT_DIR, "rtx_scaler.pkl")
+LABEL_PATH  = os.path.join(CURRENT_DIR, "label_encoder.pkl")
 
 SAMPLE_RATE = 22050
 DURATION = 3
@@ -25,32 +27,37 @@ SAMPLES_PER_TRACK = SAMPLE_RATE * DURATION
 # ==========================================
 # 🛠️ 2. PREPROCESSING (ต้องเหมือนตอน Train เป๊ะๆ)
 # ==========================================
-def preprocess_audio(file_path):
+def extract_features(data, sr):
+    mfcc    = librosa.feature.mfcc(y=data, sr=sr, n_mfcc=128)
+    mel     = librosa.feature.melspectrogram(y=data, sr=sr)
+    zcr     = librosa.feature.zero_crossing_rate(data)
+    rms     = librosa.feature.rms(y=data)
+    sc      = librosa.feature.spectral_centroid(y=data, sr=sr)
+    rolloff = librosa.feature.spectral_rolloff(y=data, sr=sr)
+    result  = np.concatenate((mfcc, mel, zcr, rms, sc, rolloff), axis=0)
+    return result.T  # (Time, 260)
+
+def preprocess_audio(file_path, scaler):
     try:
-        # 1. Load Audio
+        # 1. Load & trim silence
         y, sr = librosa.load(file_path, sr=SAMPLE_RATE, duration=DURATION)
-        
-        # 2. Pad/Truncate (ตัด/เติมให้ครบ 3 วิ)
+        y, _ = librosa.effects.trim(y, top_db=25)
+
+        # 2. Pad / Truncate
         if len(y) < SAMPLES_PER_TRACK:
-            padding = int(SAMPLES_PER_TRACK) - len(y)
-            y = np.pad(y, (0, padding), 'constant')
+            y = np.pad(y, (0, int(SAMPLES_PER_TRACK) - len(y)), 'constant')
         else:
             y = y[:int(SAMPLES_PER_TRACK)]
-            
-        # 3. Extract MFCC (40)
-        mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=40)
-        mfcc = mfcc.T  # (Time, Features)
-        
-        # 4. Normalize (สำคัญมาก!)
-        # เนื่องจากเราไม่ได้เซฟ Scaler ไว้ เราจะใช้การ Normalize ตัวเอง (Instance Norm)
-        # ซึ่งพอถูไถได้สำหรับการเทสเบื้องต้น
-        mean = np.mean(mfcc)
-        std = np.std(mfcc)
-        mfcc = (mfcc - mean) / (std + 1e-6) # ป้องกันหาร 0
-        
-        # 5. Reshape เข้า Model (1, Time, Features)
-        return np.expand_dims(mfcc, axis=0)
-        
+
+        # 3. Feature extraction (ต้องตรงกับตอน Train เป๊ะๆ)
+        feat = extract_features(y, sr)  # (T, F)
+
+        # 4. Normalize ด้วย Scaler ที่เซฟไว้ตอน Train
+        T, F = feat.shape
+        feat = scaler.transform(feat.reshape(1, -1)).reshape(1, T, F)
+
+        return feat
+
     except Exception as e:
         print(f"❌ Error: {e}")
         return None
@@ -59,17 +66,20 @@ def preprocess_audio(file_path):
 # 🚀 3. LOAD MODEL & PREDICT
 # ==========================================
 # เช็คไฟล์ก่อน
-if not os.path.exists(MODEL_PATH) or not os.path.exists(LABEL_PATH):
-    print("❌ ไม่เจอไฟล์โมเดล! กรุณารัน Train_Model ให้เสร็จก่อนครับ")
-    exit()
+for path, name in [(MODEL_PATH, "Model"), (SCALER_PATH, "Scaler"), (LABEL_PATH, "Label Encoder")]:
+    if not os.path.exists(path):
+        print(f"❌ ไม่เจอไฟล์ {name}! กรุณารัน Train_Model_RTX3060.py ให้เสร็จก่อนครับ")
+        exit()
 
 print("⏳ กำลังโหลดโมเดล...")
 model = tf.keras.models.load_model(MODEL_PATH)
+with open(SCALER_PATH, 'rb') as f:
+    scaler = pickle.load(f)
 with open(LABEL_PATH, 'rb') as f:
     lb = pickle.load(f)
 
 print(f"\n🎤 กำลังวิเคราะห์ไฟล์: {os.path.basename(TEST_FILE)}")
-input_data = preprocess_audio(TEST_FILE)
+input_data = preprocess_audio(TEST_FILE, scaler)
 
 if input_data is not None:
     # ทายผล

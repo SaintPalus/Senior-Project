@@ -4,8 +4,8 @@ import sys
 # ตั้งค่าให้โชว์ภาษาไทยได้
 sys.stdout.reconfigure(encoding='utf-8')
 
-# 🚨 แก้ Path ให้ตรงกับเครื่องคุณ
-DATA_PATH = r"C:\Users\THINK_01\66070131_SeniorP1\SeniorP1\dataset"
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_PATH = os.path.join(os.path.dirname(SCRIPT_DIR), "dataset")
 
 # คำศัพท์ที่ใช้จับอารมณ์จากชื่อโฟลเดอร์
 EMOTION_KEYWORDS = {

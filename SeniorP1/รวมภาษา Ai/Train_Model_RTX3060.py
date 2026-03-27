@@ -10,8 +10,9 @@ import seaborn as sns
 # ตั้งค่า Encoding
 sys.stdout.reconfigure(encoding='utf-8')
 
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense, LSTM, Conv1D, MaxPooling1D, Dropout, BatchNormalization, Flatten, Bidirectional, Input
+from tensorflow.keras.models import Model
+from tensorflow.keras.layers import (Dense, LSTM, Conv1D, MaxPooling1D, Dropout, BatchNormalization,
+                                     Bidirectional, Input, MultiHeadAttention, LayerNormalization, Add)
 from tensorflow.keras.utils import to_categorical
 from tensorflow.keras import mixed_precision, regularizers
 from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping, ReduceLROnPlateau
@@ -41,8 +42,8 @@ except Exception as e:
 # ==========================================
 # ⚙️ 2. ULTIMATE CONFIGURATION
 # ==========================================
-# 🚨 แก้ Path ให้ตรงเหมือนเดิมครับ
-DATA_PATH = r"C:\Users\THINK_01\66070131_SeniorP1\SeniorP1\dataset"
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_PATH = os.path.join(os.path.dirname(CURRENT_DIR), "dataset")
 
 SAMPLE_RATE = 22050
 DURATION = 3 # วินาที
@@ -88,27 +89,27 @@ def pitch(data, sampling_rate, pitch_factor=0.7):
 # 🔍 4. ADVANCED FEATURE EXTRACTION
 # ==========================================
 def extract_features(data, sr):
-    # 1. MFCC (เส้นเสียงหลัก) - ละเอียด 128
+    # 1. MFCC 128 coefficients — จับลักษณะเสียงพูดหลัก
     mfcc = librosa.feature.mfcc(y=data, sr=sr, n_mfcc=128)
-    
-    # 2. Chroma (โทนเสียง/คีย์)
-    chroma = librosa.feature.chroma_stft(y=data, sr=sr)
-    
-    # 3. Mel Spectrogram (รูปคลื่นความถี่แบบมนุษย์ได้ยิน)
+
+    # 2. Mel Spectrogram — ความถี่ตามการได้ยินของมนุษย์
     mel = librosa.feature.melspectrogram(y=data, sr=sr)
-    
-    # 4. Spectral Contrast (ความเข้มของเสียง)
-    contrast = librosa.feature.spectral_contrast(y=data, sr=sr)
-    
-    # นำทุกอย่างมาต่อกัน (Stacking) เพื่อให้ AI เห็นภาพรวม
-    # (ต้อง Transpose .T เพื่อให้ Time Step อยู่แกนแรก)
-    # Resize ให้เท่ากันก่อน stack (ใช้ MFCC เป็นฐาน)
-    
-    # เพื่อความง่ายและเร็ว เราจะใช้ MFCC เป็นพระเอกหลัก แต่ผสม Mel เข้าไป
-    # *ถ้าใช้ทุกตัวจะกิน VRAM มหาศาล เอาแค่ MFCC + Mel ก็เทพแล้วครับ*
-    
-    result = np.concatenate((mfcc, mel), axis=0) 
-    return result.T
+
+    # 3. ZCR — ความถี่ที่สัญญาณตัดแกน 0 (บอกความแหลม/ทุ้มของเสียง)
+    zcr = librosa.feature.zero_crossing_rate(data)
+
+    # 4. RMS Energy — ความดังเสียงในแต่ละช่วงเวลา
+    rms = librosa.feature.rms(y=data)
+
+    # 5. Spectral Centroid — จุดศูนย์กลางความถี่ (เสียงสว่าง/มืด)
+    sc = librosa.feature.spectral_centroid(y=data, sr=sr)
+
+    # 6. Spectral Rolloff — ความถี่ที่พลังงาน 85% อยู่ใต้จุดนี้
+    rolloff = librosa.feature.spectral_rolloff(y=data, sr=sr)
+
+    # รวม: MFCC(128) + Mel(128) + ZCR(1) + RMS(1) + SC(1) + Rolloff(1) = 260 features
+    result = np.concatenate((mfcc, mel, zcr, rms, sc, rolloff), axis=0)
+    return result.T  # shape: (Time, 260)
 
 def process_file(file_path):
     try:
@@ -196,7 +197,7 @@ if len(X) == 0:
 lb = LabelEncoder()
 y_encoded = to_categorical(lb.fit_transform(y))
 print(f"🏷️ Classes: {lb.classes_}")
-with open('label_encoder.pkl', 'wb') as f:
+with open(os.path.join(CURRENT_DIR, 'label_encoder.pkl'), 'wb') as f:
     pickle.dump(lb, f)
 
 # Split Data
@@ -208,44 +209,52 @@ X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, test_size=0.
 scaler = StandardScaler()
 N, T, F = X_train.shape
 X_train = scaler.fit_transform(X_train.reshape(N, -1)).reshape(N, T, F)
+with open(os.path.join(CURRENT_DIR, 'rtx_scaler.pkl'), 'wb') as f:
+    pickle.dump(scaler, f)
 # ใช้ Scaler ตัวเดิมกับ Test/Val (ห้าม Fit ใหม่)
 X_val = scaler.transform(X_val.reshape(X_val.shape[0], -1)).reshape(X_val.shape[0], T, F)
 X_test = scaler.transform(X_test.reshape(X_test.shape[0], -1)).reshape(X_test.shape[0], T, F)
 
 # ==========================================
-# 🧠 6. MODEL ARCHITECTURE (Bi-LSTM + CNN)
+# 🧠 6. MODEL ARCHITECTURE (CNN + BiLSTM + Self-Attention)
 # ==========================================
 input_shape = (X_train.shape[1], X_train.shape[2])
 
-model = Sequential()
+# --- Functional API (รองรับ Attention layer) ---
+inputs = Input(shape=input_shape)
 
-# Layer 1: Conv1D สกัด Feature ที่ซับซ้อน
-model.add(Conv1D(256, kernel_size=5, strides=1, padding='same', activation='relu', input_shape=input_shape))
-model.add(BatchNormalization())
-model.add(MaxPooling1D(pool_size=5, strides=2, padding='same'))
-model.add(Dropout(0.3))
+# CNN Block 1 — สกัด Pattern ระยะสั้น
+x = Conv1D(256, kernel_size=5, padding='same', activation='relu')(inputs)
+x = BatchNormalization()(x)
+x = MaxPooling1D(pool_size=2)(x)
+x = Dropout(0.3)(x)
 
-# Layer 2: Conv1D อีกชั้น
-model.add(Conv1D(128, kernel_size=5, strides=1, padding='same', activation='relu'))
-model.add(BatchNormalization())
-model.add(MaxPooling1D(pool_size=5, strides=2, padding='same'))
-model.add(Dropout(0.3))
+# CNN Block 2 — สกัด Pattern ระดับกลาง
+x = Conv1D(128, kernel_size=5, padding='same', activation='relu')(x)
+x = BatchNormalization()(x)
+x = MaxPooling1D(pool_size=2)(x)
+x = Dropout(0.3)(x)
 
-# Layer 3: Bidirectional LSTM (พระเอกของงาน)
-# อ่านหน้าไปหลัง และ หลังมาหน้า ทำให้เข้าใจบริบทเสียงดีขึ้นมาก
-model.add(Bidirectional(LSTM(128, return_sequences=True)))
-model.add(Dropout(0.3))
+# BiLSTM — จับบริบทเวลาจากซ้ายและขวา
+x = Bidirectional(LSTM(128, return_sequences=True))(x)
+x = Dropout(0.3)(x)
 
-# Layer 4: Bidirectional LSTM ชั้นสุดท้าย (ส่งเข้า Dense)
-model.add(Bidirectional(LSTM(64))) 
-model.add(Dropout(0.3))
+# Self-Attention Block — โฟกัสเฉพาะช่วงเวลาที่สำคัญของอารมณ์
+attn_out = MultiHeadAttention(num_heads=4, key_dim=64)(x, x)
+x = LayerNormalization()(Add()([x, attn_out]))  # Residual + Norm
+x = Dropout(0.2)(x)
 
-# Output Layer
-model.add(Dense(64, activation='relu', kernel_regularizer=regularizers.l2(0.001))) # L2 ช่วยลด Overfitting
-model.add(Dropout(0.3))
-model.add(Dense(len(lb.classes_), activation='softmax', dtype='float32'))
+# BiLSTM ชั้นสุดท้าย — สรุปข้อมูล
+x = Bidirectional(LSTM(64))(x)
+x = Dropout(0.3)(x)
 
-# Optimizer
+# Dense Output
+x = Dense(64, activation='relu', kernel_regularizer=regularizers.l2(0.001))(x)
+x = Dropout(0.3)(x)
+outputs = Dense(len(lb.classes_), activation='softmax', dtype='float32')(x)
+
+model = Model(inputs, outputs)
+
 opt = tf.keras.optimizers.Adam(learning_rate=0.001)
 model.compile(optimizer=opt, loss='categorical_crossentropy', metrics=['accuracy'])
 model.summary()
@@ -254,7 +263,7 @@ model.summary()
 # 🛑 7. TRAINING
 # ==========================================
 callbacks = [
-    ModelCheckpoint("ultimate_model_rtx.keras", save_best_only=True, monitor='val_accuracy', mode='max', verbose=1),
+    ModelCheckpoint(os.path.join(CURRENT_DIR, "ultimate_model_rtx.keras"), save_best_only=True, monitor='val_accuracy', mode='max', verbose=1),
     ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=5, min_lr=0.00001, verbose=1),
     EarlyStopping(monitor='val_loss', patience=12, restore_best_weights=True, verbose=1)
 ]
@@ -272,7 +281,7 @@ history = model.fit(
 # ==========================================
 # 📊 8. EVALUATION
 # ==========================================
-model.load_weights("ultimate_model_rtx.keras")
+model.load_weights(os.path.join(CURRENT_DIR, "ultimate_model_rtx.keras"))
 print("\n🏆 Loading Best Model...")
 
 # Accuracy & Loss Graph

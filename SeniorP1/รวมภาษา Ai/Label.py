@@ -6,8 +6,9 @@ import io
 # ---------------------------------------------------------
 # ตั้งค่า: เลือกภาษาที่จะโหลด
 # ---------------------------------------------------------
-dataset_name = "dataset/korean-voice-emotion-dataset" 
-output_folder = "dataset/korean_drama"  
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+dataset_name = "dataset/korean-voice-emotion-dataset"
+output_folder = os.path.join(os.path.dirname(SCRIPT_DIR), "dataset", "korean_drama")
 
 # ---------------------------------------------------------
 # เริ่มกระบวนการโหลดและแยกไฟล์
