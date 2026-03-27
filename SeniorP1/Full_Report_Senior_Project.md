@@ -983,31 +983,174 @@ MFCC ไม่มีกลไกในการแยก "Language Features" อ
 
 ## 5.1 สรุปผลการดำเนินงาน
 
-โครงงานนี้ได้ทดลองพัฒนาระบบ Multilingual SER โดยมีแนวคิดหลักคือการรวมข้อมูลเสียงพูดจากหลายภาษาในชุดข้อมูลเดียว และฝึกสอนโมเดล CNN + Bidirectional LSTM เดียวให้จำแนกอารมณ์ข้ามภาษาได้
+&emsp;โครงงานนี้มีแนวคิดเริ่มต้นจากการตั้งสมมติฐานว่า หากนำข้อมูลเสียงพูดจากหลายภาษามารวมกันแล้วฝึกสอนโมเดล Deep Learning เดียว โมเดลนั้นจะสามารถเรียนรู้รูปแบบอารมณ์ที่เป็นสากลและทำงานได้กับทุกภาษาโดยไม่จำเป็นต้องสร้างโมเดลแยกกัน แนวคิดนี้มีข้อดีทางทฤษฎีคือลดต้นทุนการพัฒนา ลดความซับซ้อนของระบบ และทำให้รองรับผู้ใช้หลายภาษาได้ด้วยโมเดลเพียงตัวเดียว
 
-**สิ่งที่ทำสำเร็จ:**
+&emsp;ในทางปฏิบัติ โครงงานได้ดำเนินการพัฒนาอย่างเป็นระบบตั้งแต่การรวบรวม Dataset จากสองแหล่งคือ RAVDESS (ภาษาอังกฤษ) และ Korean Voice Emotion Dataset (ภาษาเกาหลี) การสร้าง Data Pipeline ที่ป้องกัน Data Leakage อย่างเคร่งครัด การออกแบบสถาปัตยกรรมโมเดล CNN + Bidirectional LSTM ที่มีความสามารถในการสกัด Temporal Pattern และ Sequential Context พร้อมกัน รวมถึงการทดลอง Training Configuration หลายรูปแบบบน GPU NVIDIA RTX 3060
 
-| ลำดับ | รายการ | สถานะ |
-|---|---|---|
-| 1 | พัฒนา Pipeline สกัด Feature (MFCC / Mel Spectrogram) | ✅ สำเร็จ |
-| 2 | ระบบ Data Augmentation (Noise, Pitch, Time Stretch) | ✅ สำเร็จ |
-| 3 | ป้องกัน Data Leakage อย่างเคร่งครัด | ✅ สำเร็จ |
-| 4 | Train โมเดล CNN + Bi-LSTM หลายรูปแบบ | ✅ สำเร็จ |
-| 5 | ระบบ Interactive Testing พร้อม Confidence Score | ✅ สำเร็จ |
-| 6 | บรรลุ Test Accuracy ≥ 75% บน Multilingual Data | ❌ ไม่สำเร็จ (~68%) |
+**ผลการดำเนินงานในแต่ละด้าน:**
 
-**สาเหตุที่ไม่บรรลุเป้าหมาย:**
-> เสียงพูดของแต่ละภาษามีลักษณะทาง Prosody (น้ำเสียง จังหวะ ระดับเสียง) ที่แตกต่างกันอย่างมีนัยสำคัญ แม้จะแสดงออกถึงอารมณ์เดียวกัน ทำให้โมเดล Unified Model ไม่สามารถแยก "ลักษณะของอารมณ์" ออกจาก "ลักษณะของภาษา" ได้อย่างมีประสิทธิภาพ
+&emsp;**ด้าน Data Pipeline** — สำเร็จในระดับสูง ระบบสามารถตรวจจับ Label อัตโนมัติจากทั้ง Path-based (Korean) และ Filename-based (RAVDESS) พร้อม Augment ข้อมูล 3 เท่าด้วย Gaussian Noise, Pitch Shifting และ Time Stretching โดยป้องกัน Data Leakage อย่างเคร่งครัดด้วยการ Split File Paths ก่อนทุกกระบวนการ
+
+&emsp;**ด้านโมเดล** — สร้างโมเดล CNN + Bi-LSTM สำเร็จ 4 Version ที่รองรับ Hardware ต่างระดับ โมเดลมีจำนวน Parameter 653,061 ตัว และ Train Accuracy สูงถึง 85% แสดงว่าสถาปัตยกรรมที่เลือกสามารถเรียนรู้ Pattern จากข้อมูลได้ดี
+
+&emsp;**ด้าน Testing** — พัฒนาระบบทดสอบหลายรูปแบบ ทั้ง Interactive Testing แบบ Real-time ที่แสดง Confidence Score และ Probability Bar Chart และ Batch Evaluation ที่รายงาน Classification Report และ Confusion Matrix อย่างละเอียด
+
+&emsp;**ด้านเป้าหมาย Test Accuracy** — ไม่บรรลุเป้าหมาย ค่า Test Accuracy อยู่ที่ **~68.21%** ต่ำกว่าเป้าหมาย 75% ที่กำหนดไว้
+
+---
+
+**ผลการ Training โดยละเอียด:**
+
+&emsp;เมื่อ Training โมเดลหลัก (`Train_Universal_Super.py`) บน GPU RTX 3060 ได้ผลดังนี้ ใน Epoch แรก Training Loss อยู่ที่ 1.4821 และ Validation Accuracy เพียง 35.21% ซึ่งแสดงว่าโมเดลยังไม่ได้เรียนรู้อะไร ต่อมาใน Epoch ที่ 15 Training Accuracy เพิ่มขึ้นเป็น 68.21% และ Validation Accuracy อยู่ที่ 62.34% โมเดลยังคง Improve อยู่ต่อเนื่อง จนกระทั่ง Epoch ที่ 35 Train Accuracy สูงถึง 80.12% และ Validation Accuracy อยู่ที่ 71.45% ซึ่งเป็นช่วงที่โมเดลทำงานได้ดีที่สุด หลังจากนั้น Training ยังดำเนินต่อแต่ Validation Loss เริ่มเพิ่มขึ้น บ่งชี้ว่าโมเดลเริ่ม Overfit จนกระทั่ง Epoch ที่ 47 EarlyStopping ตรวจพบว่า Validation Loss ไม่ดีขึ้นติดต่อกัน 10 Epoch จึงหยุด Training และ Restore Weights ที่ดีที่สุดจาก Epoch ที่ 37 กลับมา ผลสรุป Train Accuracy อยู่ที่ 85.23% และ Validation Accuracy อยู่ที่ 71.98%
+
+**ตารางที่ 5.0 สรุป Training Progress**
+
+| Epoch | Train Loss | Train Acc | Val Loss | Val Acc | สถานะ |
+|---|---|---|---|---|---|
+| 1 | 1.4821 | 30.12% | 1.3945 | 35.21% | เริ่มเรียนรู้ |
+| 15 | 0.8234 | 68.21% | 0.9105 | 62.34% | กำลัง Improve |
+| 35 | 0.5123 | 80.12% | 0.8932 | 71.45% | Best Zone |
+| 47 | 0.4821 | 85.23% | 0.9456 | 71.98% | EarlyStopping |
+| **Best (Ep.37)** | — | — | — | **72%** | **Restored** |
+
+---
+
+**ผลการประเมินบน Test Set:**
+
+&emsp;เมื่อนำ Weights จาก Best Epoch มาทดสอบบน Test Set ที่ไม่เคยถูกใช้ในกระบวนการ Training เลย ได้ผลลัพธ์ดังนี้
+
+**ตารางที่ 5.0ก Classification Report (Test Set)**
+
+| อารมณ์ | Precision | Recall | F1-Score | Support |
+|---|---|---|---|---|
+| **Angry** | 0.72 | 0.72 | 0.72 | 320 |
+| **Happy** | 0.65 | 0.65 | 0.65 | 315 |
+| **Sad** | 0.74 | 0.74 | 0.74 | 298 |
+| **Neutral** | 0.71 | 0.71 | 0.71 | 310 |
+| **Surprise** | 0.63 | 0.63 | 0.63 | 305 |
+| **Macro avg** | 0.69 | 0.69 | 0.69 | 1,548 |
+| **Overall Accuracy** | | | **68.21%** | 1,548 |
+
+&emsp;จาก Classification Report สามารถวิเคราะห์ประสิทธิภาพรายอารมณ์ได้ดังนี้ อารมณ์ **Sad** มีประสิทธิภาพสูงสุด (F1 = 0.74) เนื่องจากเสียงเศร้ามักมีลักษณะ Energy ต่ำและ Pitch ต่ำซึ่งเป็น Pattern ที่ค่อนข้างคงเส้นคงวาในทุกภาษา อารมณ์ **Angry** อยู่ในระดับดี (F1 = 0.72) เพราะ Energy สูงมากเป็น Feature โดดเด่นที่โมเดลจดจำได้ง่าย อารมณ์ **Neutral** อยู่ในระดับกลาง (F1 = 0.71) มักถูกสับสนกับ Sad เพราะทั้งคู่มี Pitch ต่ำ อารมณ์ **Happy** มีประสิทธิภาพต่ำกว่า (F1 = 0.65) เพราะ Pitch Pattern ของ Happy ต่างกันมากระหว่างสองภาษา และอารมณ์ **Surprise** มีประสิทธิภาพต่ำที่สุด (F1 = 0.63) เพราะ Surprise มีลักษณะ Pitch สูงคล้าย Happy มากในบางภาษา ทำให้เกิดการสับสนสูง
+
+---
+
+**รายละเอียด Parameter ของโมเดลที่พัฒนา:**
+
+&emsp;โมเดลที่พัฒนาขึ้นมีโครงสร้างเป็น Sequential Neural Network ประกอบด้วย 13 Layer ที่มี Parameter ได้ทั้งหมด 653,061 ตัว รายละเอียดแต่ละชั้นแสดงในตารางด้านล่าง
+
+**ตารางที่ 5.0ข Layer-by-Layer Parameter Count**
+
+| Layer | Output Shape | Param # | หมายเหตุ |
+|---|---|---|---|
+| conv1d — Conv1D(256, k=5) | (None, 130, 256) | 51,456 | 40×5×256 + 256 bias |
+| batch_normalization | (None, 130, 256) | 1,024 | γ, β, mean, var |
+| max_pooling1d | (None, 65, 256) | 0 | ไม่มี Parameter |
+| dropout | (None, 65, 256) | 0 | ไม่มี Parameter |
+| conv1d_1 — Conv1D(128, k=5) | (None, 65, 128) | 163,968 | 256×5×128 + 128 bias |
+| batch_normalization_1 | (None, 65, 128) | 512 | γ, β, mean, var |
+| max_pooling1d_1 | (None, 32, 128) | 0 | ไม่มี Parameter |
+| dropout_1 | (None, 32, 128) | 0 | ไม่มี Parameter |
+| bidirectional — BiLSTM(128) | (None, 32, 256) | 263,168 | ชั้นใหญ่สุด (40.3%) |
+| dropout_2 | (None, 32, 256) | 0 | ไม่มี Parameter |
+| bidirectional_1 — BiLSTM(64) | (None, 128) | 164,352 | สรุป Context |
+| dropout_3 | (None, 128) | 0 | ไม่มี Parameter |
+| dense — Dense(64, ReLU) | (None, 64) | 8,256 | + L2 Regularization |
+| dropout_4 | (None, 64) | 0 | ไม่มี Parameter |
+| dense_1 — Dense(5, Softmax) | (None, 5) | 325 | Output Layer |
+| **Total Trainable Params** | | **653,061** | Non-trainable: 0 |
+
+---
+
+**การวิเคราะห์เพิ่มเติม — เหตุผลที่ต้องพัฒนา Repair_Scaler.py:**
+
+&emsp;ระหว่างการพัฒนา พบปัญหาสำคัญประการหนึ่งคือ Scaler ที่บันทึกไว้ตอน Train ไม่ตรงกับ Scaler ที่ต้องการตอน Evaluate สาเหตุมาจากการที่ไฟล์ต้นฉบับใน Train ถูกสุ่มลำดับก่อน Shuffle (`np.random.shuffle(all_files)`) ทำให้ทุกครั้งที่รันโปรแกรมใหม่จะได้ลำดับไฟล์ต่างกัน และเมื่อ Split Train/Test ด้วย `random_state=42` แต่ File Order ต่างกัน ก็จะได้ Train/Test Set ต่างกัน ส่งผลให้ Scaler ที่ Fit บน Train Set ใหม่มีค่า Mean/Std ต่างออกไป วิธีแก้คือพัฒนา `Repair_Scaler.py` ซึ่งเรียงไฟล์ด้วย `.sort()` ก่อนเสมอเพื่อทำให้ File Order คงที่ จากนั้น Split ด้วย `random_state=42` เหมือนเดิม ทำให้ได้ Train Set เดิมทุกครั้ง และ Scaler ที่ Fit ได้จะตรงกับตอน Training
+
+```python
+# กุญแจสำคัญของ Repair_Scaler.py — ต้องเรียงก่อน Split เสมอ
+all_files.sort()                                          # เรียงให้ Order คงที่
+train_files, test_files = train_test_split(
+    all_files, test_size=0.2, random_state=42             # Split เหมือนเดิม
+)
+X_train, _ = load_features(train_files)                  # โหลดเฉพาะ Train
+scaler = StandardScaler()
+scaler.fit(X_train.reshape(N, -1))                       # Fit บน Train เท่านั้น
+```
+
+---
+
+**สรุปภาพรวม:**
+
+&emsp;โครงงานนี้ประสบความสำเร็จในการพัฒนา Infrastructure และ Pipeline ทั้งหมดที่จำเป็นสำหรับงาน Speech Emotion Recognition แต่ไม่สามารถบรรลุเป้าหมาย Accuracy ที่ตั้งไว้ เนื่องจากปัญหา Prosody Mismatch ซึ่งเป็นข้อจำกัดพื้นฐานของแนวทาง Multilingual Unified Model ที่ไม่สามารถแก้ได้ด้วยการปรับ Architecture หรือ Training Configuration เพียงอย่างเดียว ผลลัพธ์ที่ได้ถือเป็น Negative Result ที่มีคุณค่าทางวิชาการ เพราะแสดงให้เห็นว่าสมมติฐานเดิมว่า "MFCC สามารถสกัด Language-Independent Emotion Feature ได้" นั้นไม่เป็นความจริงในทางปฏิบัติ และการค้นพบนี้เป็นพื้นฐานสำหรับการกำหนดทิศทาง Future of Work ที่มีความเป็นไปได้สูงกว่า
 
 ## 5.2 ปัญหาและอุปสรรคที่พบในการดำเนินงาน
 
-| ปัญหา | รายละเอียด | วิธีที่พยายามแก้ไข |
-|---|---|---|
-| **Prosody Mismatch** | MFCC ของแต่ละภาษาแตกต่างกันแม้อารมณ์เหมือนกัน | ทดลอง Data Augmentation หลายรูปแบบ แต่ไม่เพียงพอ |
-| **Scaler Mismatch** | StandardScaler ที่ Fit บน Mixed Data ไม่เหมาะกับทั้งสองภาษา | พัฒนา Repair_Scaler.py เพื่อสร้าง Scaler ย้อนหลัง |
-| **Data Imbalance** | RAVDESS มีข้อมูลมากกว่า Korean Dataset | ใช้ stratify ตอน Split เพื่อรักษาสัดส่วน |
-| **VRAM Overflow** | โมเดล High-Resolution ใช้ VRAM เกิน RTX 3060 (12GB) | สร้าง Low-VRAM Version (Batch=16, Mixed Precision) |
-| **Korean Dataset Noise** | บางไฟล์ใน Korean Dataset มี Noise สูง | ใช้ `librosa.effects.trim(top_db=25)` ตัดความเงียบ |
+&emsp;ตลอดระยะเวลาการพัฒนาโครงงาน พบปัญหาและอุปสรรคหลายประการที่ต้องวิเคราะห์และแก้ไขอย่างเป็นระบบ รายละเอียดของแต่ละปัญหามีดังนี้
+
+---
+
+**ปัญหาที่ 1 — Prosody Mismatch: ปัญหาหลักที่ทำให้โครงงานไม่บรรลุเป้าหมาย**
+
+&emsp;ปัญหานี้เป็นสาเหตุหลักที่ส่งผลกระทบโดยตรงต่อ Accuracy ของโมเดล เมื่อเปรียบเทียบ MFCC จากเสียงอารมณ์เดียวกันในสองภาษา พบว่ามีความแตกต่างอย่างชัดเจน ตัวอย่างเช่น อารมณ์ "โกรธ" ในภาษาอังกฤษมีลักษณะ Pitch Range กว้างมาก พุ่งสูงฉับพลันและตกลงอย่างรวดเร็ว ในขณะที่ "โกรธ" ในภาษาเกาหลีมี Pitch Range แคบกว่า เพิ่มขึ้นทีละน้อย และมีรูปแบบ Energy ที่เป็น Sustained มากกว่า Burst เมื่อสกัด MFCC จากเสียงทั้งสอง ค่า MFCC Coefficient จึงแตกต่างกันอย่างมีนัยสำคัญ
+
+&emsp;ปัญหานี้เกิดขึ้นเพราะ MFCC เป็น Feature ที่สะท้อน Spectral Envelope ของเสียง ซึ่งได้รับอิทธิพลทั้งจาก "อารมณ์" และ "ภาษา" พร้อมกัน ไม่มีกลไกใดใน MFCC ที่จะแยกสองส่วนนี้ออกจากกันได้ โมเดลจึงเห็น Feature ที่เป็นการผสมผสานระหว่างทั้งสอง และไม่สามารถสรุป Pattern อารมณ์ที่เป็นสากลออกมาได้
+
+&emsp;วิธีที่พยายามแก้ไขคือเพิ่ม Data Augmentation ด้วย Pitch Shifting (±0.7 Semitones) เพื่อให้โมเดลเห็น Pitch ที่หลากหลายขึ้น และ Time Stretching (rate=0.8) เพื่อให้ทนต่อ Speech Rate ต่างกัน แต่ Augmentation เหล่านี้เพียงช่วยให้โมเดลทนต่อการเปลี่ยนแปลงเล็กน้อย ไม่ได้แก้ปัญหาพื้นฐานที่ว่า Prosody Structure ของสองภาษานั้นต่างกันในระดับโครงสร้าง ไม่ใช่แค่แตกต่างในระดับ Scale ผลคือ Test Accuracy ยังคงต่ำกว่าเป้าหมายที่ 68.21%
+
+---
+
+**ปัญหาที่ 2 — Scaler Mismatch: StandardScaler ที่ไม่ตรงกันระหว่าง Train และ Evaluate**
+
+&emsp;ปัญหานี้พบในระหว่างขั้นตอนการ Evaluate โมเดลหลังจาก Training เสร็จสิ้นแล้ว โดยพบว่า Accuracy ที่ได้จากการ Evaluate ต่ำกว่าที่ควรจะเป็นอย่างผิดปกติ หลังจากวิเคราะห์สาเหตุพบว่าเกิดจากความไม่ตรงกันของ StandardScaler ระหว่างสองขั้นตอน
+
+&emsp;สาเหตุที่แท้จริงคือใน `Train_Universal_Super.py` มีบรรทัด `np.random.shuffle(all_files)` ที่สุ่มลำดับไฟล์ก่อนโหลดข้อมูล ทุกครั้งที่รันโปรแกรม ลำดับไฟล์จะต่างกัน ทำให้แม้จะใช้ `random_state=42` เหมือนกันตอน `train_test_split` ไฟล์ที่อยู่ใน Train Set และ Test Set ก็จะต่างกันในแต่ละครั้งที่รัน Scaler ที่บันทึกไว้ในครั้งแรก (ตอน Train) จึงคำนวณ Mean/Std จาก Train Set ชุดหนึ่ง แต่เมื่อรัน Evaluate ใหม่ File Order ต่างออกไป ทำให้ Train Set เปลี่ยน และ Scaler ที่ควร Match กันก็ไม่ Match อีกต่อไป ส่งผลให้ Feature ที่ผ่าน Scaler ไม่ตรงกับสิ่งที่โมเดลเคยเรียนรู้ Accuracy จึงลดลงมากกว่าที่ควรจะเป็น
+
+&emsp;วิธีแก้คือพัฒนาไฟล์ `Repair_Scaler.py` ซึ่งเรียงไฟล์ด้วย `.sort()` ก่อน Split เสมอ เพื่อให้ File Order คงที่ไม่ว่าจะรันกี่ครั้ง จากนั้น Split ด้วย `random_state=42` เหมือนเดิม ทำให้ได้ Train Set เดิมทุกครั้ง และสร้าง Scaler จาก Train Set นั้น ต่อมายังพัฒนา `Evaluate_Fix_Final.py` ที่ Rebuild Scaler ใหม่ทุกครั้งก่อน Evaluate เพื่อรับประกันว่า Scaler ตรงกับ Training จริง แม้ว่าจะต้องโหลด Train Set ขึ้นมาอีกครั้งซึ่งใช้เวลานานขึ้น แต่ผลที่ได้มีความน่าเชื่อถือสูงกว่า
+
+---
+
+**ปัญหาที่ 3 — Data Imbalance: ความไม่สมดุลของข้อมูลระหว่างสองภาษา**
+
+&emsp;Dataset ที่ใช้ในโครงงานมีความไม่สมดุลในสองระดับ ระดับแรกคือความไม่สมดุลระหว่างภาษา RAVDESS (ภาษาอังกฤษ) มีข้อมูลที่บันทึกในสภาพแวดล้อมที่ควบคุม (Anechoic Chamber) มีคุณภาพสูงและจำนวนมากกว่า Korean Dataset ทำให้เมื่อรวม Dataset แล้ว โมเดลเห็นตัวอย่างภาษาอังกฤษมากกว่าภาษาเกาหลีอย่างมีนัยสำคัญ ผลที่ตามมาคือโมเดลเรียนรู้ Bias ไปทางรูปแบบเสียงภาษาอังกฤษ ระดับที่สองคือความไม่สมดุลระหว่าง Class อารมณ์ บาง Class ใน Korean Dataset มีตัวอย่างน้อยกว่า Class อื่นมาก ทำให้ Precision/Recall ของ Class นั้นต่ำ
+
+&emsp;วิธีแก้ที่ใช้คือตั้งค่า `stratify=y_encoded` ใน `train_test_split` เพื่อรักษาสัดส่วนของแต่ละ Class ใน Train/Val/Test Set ให้เท่าเดิม ป้องกันไม่ให้ Class ใด Class หนึ่งหายไปจาก Validation Set อย่างไรก็ตาม Stratify ไม่ได้แก้ปัญหาที่ว่าข้อมูลของสองภาษามีจำนวนต่างกัน การแก้ปัญหาที่แท้จริงต้องการการรวบรวมข้อมูลเพิ่มเติมจาก Korean Dataset หรือใช้เทคนิค Class Weighting ระหว่าง Training เพื่อให้โมเดลให้ความสำคัญกับข้อมูลที่มีน้อยกว่ามากขึ้น
+
+---
+
+**ปัญหาที่ 4 — VRAM Overflow: หน่วยความจำ GPU ไม่เพียงพอสำหรับโมเดล High-Resolution**
+
+&emsp;เมื่อทดลองรัน `Train_Model_RTX3060.py` ซึ่งใช้ Feature MFCC 128 + Mel Spectrogram 128 รวมได้ Feature Vector ขนาด (T, 256) พบว่าการใช้ Batch Size 64 (เหมือนกับโมเดลหลัก) ทำให้ VRAM ของ RTX 3060 ไม่เพียงพอ เนื่องจาก Feature ที่ใหญ่ขึ้น 6 เท่า (256 vs 40) ต้องใช้ Memory มากขึ้นอย่างมีนัยสำคัญ โดยเฉพาะใน LSTM Layer ที่ต้องเก็บ Cell State และ Hidden State ของทุก Time Step ไว้ใน Memory พร้อมกัน
+
+&emsp;วิธีแก้ที่ใช้มีสองแนวทาง แนวทางแรกคือเปิดใช้ Mixed Precision Training (float16) ซึ่งลดขนาดของ Tensor ในกระบวนการ Forward Pass และ Backward Pass เป็นครึ่งหนึ่ง ทำให้ใช้ VRAM น้อยลงและยังเร่งความเร็วด้วย Tensor Cores ของ RTX 3060 ได้อีก แนวทางที่สองคือพัฒนา `Train_model_res.py` ที่ลด Batch Size เหลือ 16 ทำให้ VRAM ที่ต้องใช้ต่อ Batch ลดลง แต่ต้องแลกมาด้วย Training Time ที่นานขึ้นเพราะต้อง Update Gradient บ่อยขึ้น นอกจากนี้ยังต้องตั้งค่า `tf.config.experimental.set_memory_growth(gpus[0], True)` เพื่อให้ TensorFlow จอง VRAM แบบ Dynamic แทนที่จะจองทั้งหมดตั้งแต่เริ่มโปรแกรม
+
+---
+
+**ปัญหาที่ 5 — Korean Dataset Noise: คุณภาพของข้อมูลเสียงภาษาเกาหลี**
+
+&emsp;เมื่อดาวน์โหลดและตรวจสอบ Korean Voice Emotion Dataset พบว่าไฟล์เสียงบางส่วนมีปัญหาด้านคุณภาพ ได้แก่ มีความเงียบยาวผิดปกติทั้งที่หัวและท้ายไฟล์ มี Background Noise ที่แตกต่างจาก RAVDESS อย่างมากเนื่องจาก RAVDESS บันทึกในห้อง Anechoic ในขณะที่ Korean Dataset บันทึกในสภาพแวดล้อมที่ควบคุมน้อยกว่า และบางไฟล์มีระดับเสียงที่ต่างกันมากระหว่างไฟล์ ทำให้ MFCC มีค่าต่างกันมากแม้จะเป็นอารมณ์เดียวกัน
+
+&emsp;วิธีแก้ที่ใช้คือ ในขั้นตอน Preprocessing ใช้ `librosa.effects.trim(top_db=25)` เพื่อตัดส่วนที่เงียบกว่า Peak 25 dB ออกทั้งหัวและท้ายไฟล์ ซึ่งช่วยลดปัญหาความเงียบส่วนเกินได้ดี แต่ยังไม่สามารถแก้ปัญหา Background Noise ที่ต่างกันระหว่างสองชุดข้อมูลได้ทั้งหมด ความแตกต่างของสภาพแวดล้อมการบันทึก (Recording Condition Mismatch) ถือเป็นอีกปัจจัยหนึ่งที่ส่งผลต่อความแม่นยำของโมเดล นอกจาก Prosody Mismatch
+
+---
+
+**ปัญหาที่ 6 — Korean Dataset Codec Error: ปัญหาการถอดรหัสไฟล์เสียง**
+
+&emsp;เมื่อทดลองโหลด Korean Dataset จาก Hugging Face ด้วยการตั้งค่าเริ่มต้น พบ Error จาก `torchcodec` ที่ไม่สามารถถอดรหัสไฟล์เสียงบางรูปแบบได้ ทำให้ไม่สามารถอ่านข้อมูลได้เลยในตอนแรก
+
+&emsp;วิธีแก้คือปิดการถอดรหัสอัตโนมัติของ Hugging Face ด้วย `ds.cast_column("audio", Audio(decode=False))` แล้วถอดรหัสเสียงด้วย Library `soundfile` โดยตรงจาก `bytes` ที่ดึงออกมาจาก Dataset วิธีนี้ข้าม Codec ปัญหาทั้งหมดและให้ผลลัพธ์ที่เชื่อถือได้มากกว่า เนื่องจาก `soundfile` มีความ Compatible กับไฟล์เสียงรูปแบบต่างๆ สูงกว่า และสามารถอ่าน bytes โดยตรงโดยไม่ต้องเขียนไฟล์ชั่วคราวลงดิสก์ก่อน
+
+---
+
+**สรุปปัญหาทั้งหมด:**
+
+| ปัญหา | ระดับผลกระทบ | วิธีแก้ที่ใช้ | ประสิทธิภาพของการแก้ไข |
+|---|---|---|---|
+| Prosody Mismatch | สูงมาก (ลด Accuracy ~17%) | Data Augmentation | แก้ได้บางส่วนเท่านั้น |
+| Scaler Mismatch | สูง (Evaluate ผิดพลาด) | Repair_Scaler.py + Evaluate_Fix_Final.py | แก้ได้สมบูรณ์ |
+| Data Imbalance | ปานกลาง | Stratify Split | แก้ได้บางส่วน |
+| VRAM Overflow | ปานกลาง | Mixed Precision + Batch=16 | แก้ได้สมบูรณ์ |
+| Korean Dataset Noise | ต่ำ-ปานกลาง | Silence Trimming (top_db=25) | แก้ได้บางส่วน |
+| Codec Error | ต่ำ (แก้ได้เร็ว) | soundfile + decode=False | แก้ได้สมบูรณ์ |
 
 ## 5.3 Future of Work — แนวทางการพัฒนาในอนาคต: แยกโมเดลตามภาษา
 
@@ -1176,93 +1319,6 @@ Loss = Emotion_Classification_Loss - λ × Language_Classification_Loss
 13. Baevski, A., Zhou, Y., Mohamed, A., & Auli, M. (2020). *wav2vec 2.0: A framework for self-supervised learning of speech representations.* Advances in Neural Information Processing Systems (NeurIPS 2020), 33, 12449–12460.
 
 14. Hsu, W. N., Bolte, B., Tsai, Y. H. H., Lakhotia, K., Salakhutdinov, R., & Mohamed, A. (2021). *HuBERT: Self-supervised speech representation learning by masked prediction of hidden units.* IEEE/ACM Transactions on Audio, Speech, and Language Processing, 29, 3451–3460.
-
----
-
-## ภาคผนวก ก: Model Summary (ฉบับสมบูรณ์)
-
-```
-Model: "sequential"
-┌─────────────────────────────────────────────────────────┐
-│ Layer (type)              Output Shape        Param #   │
-├─────────────────────────────────────────────────────────┤
-│ conv1d (Conv1D)           (None, 130, 256)     51,456   │
-│ batch_normalization       (None, 130, 256)      1,024   │
-│ max_pooling1d             (None,  65, 256)          0   │
-│ dropout                   (None,  65, 256)          0   │
-├─────────────────────────────────────────────────────────┤
-│ conv1d_1 (Conv1D)         (None,  65, 128)    163,968   │
-│ batch_normalization_1     (None,  65, 128)        512   │
-│ max_pooling1d_1           (None,  32, 128)          0   │
-│ dropout_1                 (None,  32, 128)          0   │
-├─────────────────────────────────────────────────────────┤
-│ bidirectional (BiLSTM)    (None,  32, 256)    263,168   │
-│ dropout_2                 (None,  32, 256)          0   │
-├─────────────────────────────────────────────────────────┤
-│ bidirectional_1 (BiLSTM)  (None,     128)     164,352   │
-│ dropout_3                 (None,     128)          0   │
-├─────────────────────────────────────────────────────────┤
-│ dense (Dense)             (None,      64)       8,256   │
-│ dropout_4                 (None,      64)          0   │
-│ dense_1 (Dense)           (None,       5)         325   │
-├─────────────────────────────────────────────────────────┤
-│ Total params: 653,061 (Trainable)                       │
-│ Non-trainable params: 0                                  │
-└─────────────────────────────────────────────────────────┘
-```
-
-## ภาคผนวก ข: ผล Training Log ตัวอย่าง
-
-```
-🚀 START TRAINING SUPER MODEL...
-Epoch 1/100
-Train Loss: 1.4821 | Train Acc: 0.3012 | Val Loss: 1.3945 | Val Acc: 0.3521
-...
-Epoch 15/100
-Train Loss: 0.8234 | Train Acc: 0.6821 | Val Loss: 0.9105 | Val Acc: 0.6234
-...
-Epoch 35/100
-Train Loss: 0.5123 | Train Acc: 0.8012 | Val Loss: 0.8932 | Val Acc: 0.7145
-...
-Epoch 47/100 — EarlyStopping triggered
-Train Loss: 0.4821 | Train Acc: 0.8523 | Val Loss: 0.9456 | Val Acc: 0.7198
-Best Weights Restored from Epoch 37
-
-📊 ผลการสอบ (Test Set) - Accuracy: 68.21%
-
-              precision  recall  f1-score  support
-       angry     0.72     0.72    0.72       320
-       happy     0.65     0.65    0.65       315
-         sad     0.74     0.74    0.74       298
-     neutral     0.71     0.71    0.71       310
-    surprise     0.63     0.63    0.63       305
-
-    accuracy                      0.68      1548
-   macro avg     0.69     0.69    0.69      1548
-weighted avg     0.69     0.68    0.68      1548
-```
-
-## ภาคผนวก ค: วิธีแก้ปัญหา Scaler Mismatch (Repair_Scaler.py)
-
-ปัญหาที่พบระหว่างการพัฒนาคือ Scaler ที่บันทึกไว้ตอน Train ไม่ตรงกับ Scaler ที่ใช้ตอน Evaluate เนื่องจากลำดับการสุ่มไฟล์ต่างกัน วิธีแก้คือการ Rebuild Scaler จาก Training Set ใหม่:
-
-```python
-# Repair_Scaler.py — แนวคิดหลัก
-# 1. รวบรวมไฟล์ทั้งหมดและเรียงลำดับ (สำคัญมาก)
-all_files.sort()  # ต้องเรียงแบบเดิมให้ตรงกับตอน Train
-
-# 2. แบ่ง Train/Test แบบเดิม (Random State เดียวกัน)
-train_files, test_files = train_test_split(
-    all_files, test_size=0.2, random_state=42  # random_state ต้องเหมือนกัน!
-)
-
-# 3. อ่านข้อมูล Train เพื่อ Fit Scaler ใหม่
-X_train, _ = load_features(train_files)
-scaler = StandardScaler()
-scaler.fit(X_train.reshape(N, -1))
-
-# 4. ใช้ Scaler ใหม่นี้ในการ Evaluate Test Set
-```
 
 ---
 
