@@ -7,9 +7,9 @@
 | รายการ | รายละเอียด |
 |---|---|
 | ชื่อโครงงาน | ระบบรู้จำอารมณ์จากเสียงพูดแบบรวมหลายภาษา |
-| นักศึกษา | รหัส 66070131/66070062|
+| นักศึกษา | รหัส 66070131 |
 | สาขาวิชา | วิทยาการคอมพิวเตอร์ |
-| ภาคการศึกษา | 2 / 2568 |
+| ภาคการศึกษา | 2 / 2567 |
 
 ---
 
@@ -451,209 +451,263 @@ dataset/
 
 ## 3.1 ภาพรวมสถาปัตยกรรมระบบ
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    MULTILINGUAL SER SYSTEM                       │
-│           (ระบบรู้จำอารมณ์จากเสียงพูดแบบรวมหลายภาษา)             │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-              ┌───────────────┴───────────────┐
-              │                               │
-     [Training Pipeline]            [Inference Pipeline]
-              │                               │
-              ▼                               ▼
-    ┌──────────────────┐           ┌──────────────────┐
-    │  File Discovery  │           │   Audio Input    │
-    │  (os.walk)       │           │  (WAV/MP3/FLAC)  │
-    └────────┬─────────┘           └────────┬─────────┘
-             │                              │
-             ▼                              ▼
-    ┌──────────────────┐           ┌──────────────────┐
-    │  Label Detection │           │   Preprocessing  │
-    │  Path / Filename │           │  Trim → Pad/Cut  │
-    └────────┬─────────┘           └────────┬─────────┘
-             │                              │
-             ▼                              ▼
-    ┌──────────────────┐           ┌──────────────────┐
-    │ Audio Load       │           │Feature Extraction│
-    │ librosa.load()   │           │  MFCC (40 coeff) │
-    └────────┬─────────┘           └────────┬─────────┘
-             │                              │
-             ▼                              ▼
-    ┌──────────────────┐           ┌──────────────────┐
-    │ Silence Removal  │           │  Normalization   │
-    │ trim(top_db=25)  │           │  StandardScaler  │
-    └────────┬─────────┘           └────────┬─────────┘
-             │                              │
-             ▼                              ▼
-    ┌──────────────────┐           ┌──────────────────┐
-    │ Feature Extract  │           │  CNN + Bi-LSTM   │
-    │ MFCC → (T, 40)  │           │    Model         │
-    └────────┬─────────┘           └────────┬─────────┘
-             │                              │
-             ▼                              ▼
-    ┌──────────────────┐           ┌──────────────────┐
-    │ Data Augmentation│           │  Softmax Output  │
-    │ Noise/Pitch/Time │           │  Emotion + Conf% │
-    └────────┬─────────┘           └──────────────────┘
-             │
-             ▼
-    ┌──────────────────┐
-    │  Train/Val/Test  │
-    │  Split + Scaler  │
-    └────────┬─────────┘
-             │
-             ▼
-    ┌──────────────────┐
-    │  CNN + Bi-LSTM   │
-    │  Model Training  │
-    └────────┬─────────┘
-             │
-             ▼
-    ┌──────────────────┐
-    │  Save Best Model │
-    │  (.keras + .pkl) │
-    └──────────────────┘
-```
+ระบบ Multilingual SER แบ่งการทำงานออกเป็น 2 Pipeline หลัก คือ **Training Pipeline** (กระบวนการฝึกสอนโมเดล) และ **Inference Pipeline** (กระบวนการทำนายอารมณ์จากไฟล์เสียงใหม่) ทั้งสอง Pipeline ใช้ขั้นตอน Preprocessing และ Feature Extraction ที่เหมือนกันทุกประการเพื่อให้ผลลัพธ์สอดคล้องกัน
+
+### Training Pipeline
+
+| ลำดับ | ขั้นตอน | รายละเอียด | เครื่องมือที่ใช้ |
+|---|---|---|---|
+| 1 | **File Discovery** | สแกนโฟลเดอร์ Dataset แบบ Recursive เพื่อรวบรวมไฟล์เสียงทุกชนิด | `os.walk()` |
+| 2 | **Label Detection** | ตรวจจับอารมณ์จากชื่อโฟลเดอร์ (Korean) หรือชื่อไฟล์ (RAVDESS) | Path/Filename Parsing |
+| 3 | **Audio Load** | โหลดไฟล์เสียงและแปลงเป็น NumPy Array ที่ Sample Rate มาตรฐาน | `librosa.load()` |
+| 4 | **Silence Removal** | ตัดความเงียบหัวท้ายออกเพื่อลด Noise ที่ไม่มีข้อมูล | `librosa.effects.trim()` |
+| 5 | **Pad / Cut** | ปรับความยาวสัญญาณให้คงที่ 3 วินาที (66,150 samples) | `np.pad()` |
+| 6 | **Feature Extraction** | สกัด MFCC จากสัญญาณเสียง ได้ Matrix ขนาด (T, 40) | `librosa.feature.mfcc()` |
+| 7 | **Data Augmentation** | สร้างตัวอย่างเพิ่มจาก Train Set เท่านั้น (Noise / Pitch / Time) | `librosa` effects |
+| 8 | **Train/Val/Test Split** | แบ่งข้อมูลก่อนทุกกระบวนการเพื่อป้องกัน Data Leakage | `train_test_split()` |
+| 9 | **StandardScaler** | Normalize Feature ให้มีค่าเฉลี่ย 0 และ Std 1 (Fit บน Train เท่านั้น) | `StandardScaler` |
+| 10 | **Model Training** | ฝึกสอน CNN + Bi-LSTM พร้อม EarlyStopping และ ReduceLROnPlateau | `model.fit()` |
+| 11 | **Save Best Model** | บันทึกโมเดลที่ดีที่สุด (val_accuracy สูงสุด) พร้อม Scaler | `.keras` + `.pkl` |
+
+### Inference Pipeline
+
+| ลำดับ | ขั้นตอน | รายละเอียด | หมายเหตุ |
+|---|---|---|---|
+| 1 | **Audio Input** | รับไฟล์เสียงรูปแบบ WAV / MP3 / FLAC | ไฟล์ใหม่ที่ไม่เคยเห็นระหว่าง Train |
+| 2 | **Preprocessing** | Trim → Pad/Cut ให้ยาว 3 วินาที เหมือน Training | ต้องใช้ parameter เดิมทุกอย่าง |
+| 3 | **Feature Extraction** | สกัด MFCC 40 coefficients | ต้องใช้ `n_mfcc=40` เหมือนตอน Train |
+| 4 | **Normalization** | Transform ด้วย Scaler ที่บันทึกไว้จาก Train | ห้าม Fit ใหม่ — ต้อง Load จาก `.pkl` |
+| 5 | **Model Prediction** | ส่ง Feature เข้าโมเดล CNN + Bi-LSTM | โมเดลคำนวณความน่าจะเป็นทั้ง 5 อารมณ์ |
+| 6 | **Softmax Output** | ได้ผลลัพธ์เป็น Probability ของแต่ละอารมณ์ รวมกัน = 1.0 | เช่น Angry=0.72, Happy=0.12, ... |
 
 ## 3.2 การออกแบบ Data Pipeline
 
 ### 3.2.1 Label Detection (2 วิธี)
 
-ระบบตรวจจับ Label ของไฟล์เสียงได้สองวิธีเพื่อรองรับ Dataset หลายรูปแบบ:
+&emsp;ระบบจำเป็นต้องอ่าน Label (ประเภทอารมณ์) ของไฟล์เสียงแต่ละไฟล์โดยอัตโนมัติ เนื่องจาก Dataset ที่ใช้มีสองแหล่งที่มีรูปแบบการจัดเก็บต่างกันโดยสิ้นเชิง จึงออกแบบระบบตรวจจับ Label ไว้ 2 วิธี ให้ทำงานตามลำดับความสำคัญ
 
 **วิธีที่ 1 — Path-based Detection (สำหรับ Korean Dataset):**
+
+&emsp;Korean Dataset จัดเก็บไฟล์เสียงโดยแยกโฟลเดอร์ตามอารมณ์ เช่น `dataset/angry/file.wav` ดังนั้นระบบจะตรวจสอบว่า path ของไฟล์มีชื่อโฟลเดอร์ที่ตรงกับคำสำคัญของอารมณ์หรือไม่ โดยแปลง path เป็นตัวพิมพ์เล็กและเปลี่ยน backslash เป็น forward slash ก่อน เพื่อให้การเปรียบเทียบทำงานได้ถูกต้องบนทุก OS จากนั้นวนลูปตรวจสอบกับ Dictionary `EMOTION_KEYWORDS` ทีละคำ ถ้าพบคำใดอยู่ในรูปแบบ `/keyword/` ในสาย path ก็กำหนด Label ทันทีและหยุดการค้นหา
+
 ```python
-# ถ้า path มีโฟลเดอร์ /angry/ ก็ label = "angry"
+# แปลง path ให้เป็นมาตรฐาน (lowercase + forward slash)
+path_check = file_path.lower().replace('\\', '/')
+
+# EMOTION_KEYWORDS = {'angry': 'angry', 'happy': 'happy', 'sad': 'sad', ...}
 for key, emotion_name in EMOTION_KEYWORDS.items():
+    # ตรวจสอบว่า path มีโฟลเดอร์ชื่อ /angry/ หรือ /happy/ เป็นต้น
     if f"/{key}/" in path_check:
         label = emotion_name
-        break
+        break  # พบแล้ว หยุดวนลูป
 ```
 
 **วิธีที่ 2 — Filename-based Detection (สำหรับ RAVDESS):**
+
+&emsp;RAVDESS Dataset ใช้รูปแบบชื่อไฟล์แบบ Structured Code เช่น `03-01-05-01-01-01-12.wav` โดยแต่ละตำแหน่งที่คั่นด้วยขีด (-) มีความหมายเฉพาะ ตำแหน่งที่ 3 (index 2 เมื่อนับจาก 0) คือ Emotion Code ได้แก่ `01` = neutral, `03` = happy, `04` = sad, `05` = angry ระบบจะแยกชื่อไฟล์ด้วย `.split('-')` แล้วตรวจสอบว่า `parts[2]` อยู่ใน RAVDESS_MAP หรือไม่ ถ้าใช่จะดึง Label ออกมาจาก Dictionary
+
 ```python
-# ไฟล์ 03-01-05-01-01-01-12.wav → parts[2] = '05' → Angry
-RAVDESS_MAP = {'03': 'happy', '04': 'sad', '05': 'angry', '01': 'neutral'}
-parts = filename.split('-')
+# RAVDESS_MAP จับคู่ Emotion Code กับชื่ออารมณ์
+RAVDESS_MAP = {'01': 'neutral', '03': 'happy', '04': 'sad', '05': 'angry'}
+
+filename = os.path.basename(path_check)   # ดึงเฉพาะชื่อไฟล์
+parts = filename.split('-')               # ['03','01','05','01','01','01','12.wav']
+
+# ตรวจสอบว่าไฟล์มีรูปแบบ RAVDESS และ Emotion Code อยู่ใน Map
 if len(parts) >= 3 and parts[2] in RAVDESS_MAP:
-    label = RAVDESS_MAP[parts[2]]
+    label = RAVDESS_MAP[parts[2]]         # parts[2]='05' → label='angry'
 ```
+
+&emsp;ระบบจะลองวิธีที่ 1 ก่อน หากไม่พบจึงลองวิธีที่ 2 และหากทั้งสองวิธีไม่สามารถระบุ Label ได้ ไฟล์นั้นจะถูกข้ามไปโดยไม่นำเข้า Dataset เพื่อป้องกันข้อมูลที่ไม่มี Label ปะปนกับข้อมูลที่ถูกต้อง
+
+---
 
 ### 3.2.2 Preprocessing Pipeline
 
+&emsp;ก่อนที่จะสกัด Feature จากไฟล์เสียง จำเป็นต้องผ่านขั้นตอน Preprocessing เพื่อทำให้ข้อมูลทุกไฟล์อยู่ในรูปแบบมาตรฐานเดียวกัน เนื่องจากไฟล์เสียงใน Dataset มีความยาวต่างกัน มี Sample Rate ต่างกัน และบางไฟล์มีความเงียบที่ต้นและปลายเสียง ซึ่งจะทำให้ Feature ที่สกัดออกมามีขนาดไม่เท่ากันและมี Noise ที่ไม่จำเป็น ขั้นตอน Preprocessing มีทั้งหมด 3 ขั้น ดังนี้
+
+**ขั้นที่ 1 — โหลดไฟล์เสียง และแปลง Sample Rate:**
+
+&emsp;ใช้ `librosa.load()` โหลดไฟล์เสียงและแปลงเป็น NumPy Array โดยบังคับ Sample Rate ให้เป็น 22,050 Hz เสมอ ไม่ว่าไฟล์ต้นฉบับจะบันทึกที่ความถี่ใดก็ตาม นอกจากนี้ยังกำหนด `duration=3` เพื่อตัดข้อมูลให้ไม่เกิน 3 วินาทีตั้งแต่ขั้นตอนการโหลด ซึ่งช่วยประหยัดหน่วยความจำสำหรับไฟล์ที่ยาวมาก
+
 ```python
-# โหลดเสียงด้วย Sample Rate มาตรฐาน
+# sr=22050 → บังคับ Resample เป็น 22,050 Hz ทุกไฟล์
+# duration=3 → ตัดให้ไม่เกิน 3 วินาทีตั้งแต่ต้น (ประหยัด RAM)
 data, sr = librosa.load(file_path, sr=22050, duration=3)
+# data = NumPy Array รูปร่าง (N_samples,) เช่น (66150,) สำหรับ 3 วินาที
+# sr   = 22050 เสมอ (ค่าที่เราบังคับ)
+```
 
-# ตัดความเงียบที่ปลายเสียง
+**ขั้นที่ 2 — ตัดความเงียบ (Silence Trimming):**
+
+&emsp;หลังจากโหลดแล้ว ไฟล์เสียงอาจมีความเงียบที่หัวและท้าย (เช่น ช่วงที่นักแสดงหายใจก่อนพูด หรือช่วงหลังจากพูดจบ) ความเงียบเหล่านี้ไม่มีข้อมูล Emotion ใดๆ แต่จะทำให้ MFCC ของแต่ละไฟล์มีรูปแบบต่างกันโดยไม่จำเป็น `librosa.effects.trim()` จะตัดส่วนที่มีพลังงานต่ำกว่า `top_db=25` ออก (25 dB ต่ำกว่า Peak ของสัญญาณ) แล้วคืนเฉพาะส่วนที่มีเสียงจริงๆ
+
+```python
+# top_db=25 หมายความว่า ตัดส่วนที่เงียบกว่า Peak 25 dB ออก
+# _ คือ index ของส่วนที่เหลือ (ไม่ได้ใช้)
 data, _ = librosa.effects.trim(data, top_db=25)
+# ผลลัพธ์: data มีความยาวสั้นลง เหลือเฉพาะส่วนที่มีเสียงพูดจริง
+```
 
-# ปรับให้ยาวเท่ากันทุกไฟล์ (3 วินาที = 66,150 samples)
+**ขั้นที่ 3 — ปรับความยาวให้เท่ากันทุกไฟล์ (Pad / Cut):**
+
+&emsp;โมเดล CNN + Bi-LSTM ต้องการ Input ที่มีขนาดคงที่ทุก Batch ดังนั้นหลังจากตัดความเงียบแล้ว ต้องปรับความยาวสัญญาณให้เท่ากับ 3 วินาทีพอดี (66,150 samples = 22,050 Hz × 3 วินาที) โดยถ้าสัญญาณสั้นกว่า 66,150 samples จะเติม 0 ต่อท้าย (Zero Padding) และถ้ายาวกว่าจะตัดเอาเฉพาะ 66,150 samples แรก
+
+```python
+SAMPLES_PER_TRACK = 22050 * 3  # = 66,150 samples
+
 if len(data) < SAMPLES_PER_TRACK:
+    # สัญญาณสั้นกว่า 3 วินาที → เติม 0 ต่อท้าย (Zero Padding)
+    # (0, SAMPLES_PER_TRACK - len(data)) = เติมด้านขวาเท่านั้น
     data = np.pad(data, (0, SAMPLES_PER_TRACK - len(data)), 'constant')
 else:
+    # สัญญาณยาวกว่า 3 วินาที → ตัดเอาแค่ 3 วินาทีแรก
     data = data[:SAMPLES_PER_TRACK]
+# ผลลัพธ์: data.shape = (66150,) เสมอ ไม่ว่าต้นฉบับจะยาวแค่ไหน
 ```
+
+---
 
 ### 3.2.3 การป้องกัน Data Leakage (Critical Process)
 
-Data Leakage คือปัญหาที่ข้อมูล Test ปนเข้าสู่กระบวนการ Train ทำให้ผลประเมินสูงเกินจริง
+**Data Leakage คืออะไร และทำไมถึงอันตราย**
 
-```
-❌ วิธีผิด (มี Data Leakage):
-   1. Load ข้อมูลทั้งหมด
-   2. Augment ทั้งหมด          ← ข้อมูล Augment ของ Train ปนกับ Test!
-   3. Split Train/Test
+&emsp;Data Leakage คือสถานการณ์ที่ข้อมูลจากชุด Test Set "รั่วไหล" เข้าไปมีอิทธิพลต่อกระบวนการสร้างโมเดล ทำให้โมเดลได้ "ดู" ข้อมูลที่ควรจะเป็นข้อมูลทดสอบไปแล้วบางส่วนก่อนที่จะถูกทดสอบจริง ผลที่ตามมาคือ Accuracy ที่วัดได้สูงกว่าความเป็นจริง ทำให้ประเมินประสิทธิภาพของโมเดลผิดพลาดอย่างมีนัยสำคัญ และเมื่อนำโมเดลไปใช้งานจริงกับข้อมูลที่ไม่เคยเห็นมาก่อน ประสิทธิภาพจะต่ำกว่าที่รายงานไว้มาก
 
-✅ วิธีถูก (ไม่มี Data Leakage):
-   1. Split File Paths ก่อน (train_files / val_files / test_files)
-   2. Augment เฉพาะ train_files เท่านั้น (x3 samples)
-   3. Load test_files แบบ Original ไม่ Augment
-   4. Fit StandardScaler บน X_train เท่านั้น
-   5. Transform X_val และ X_test ด้วย Scaler เดิม (ห้าม Fit ซ้ำ)
-```
+**แหล่งที่มาของ Data Leakage ในโครงงานนี้**
+
+&emsp;ใน Pipeline ของงาน SER มีโอกาสเกิด Data Leakage ได้ 2 จุดหลักคือ
+
+&emsp;**จุดที่ 1 — Data Augmentation ก่อน Split:** หากนำข้อมูลทั้งหมดมา Augment ก่อน แล้วค่อย Split โดยสมมติว่ามีไฟล์ต้นฉบับ A อยู่ในชุดข้อมูล เมื่อ Augment จะได้ไฟล์ A, A_noise, A_pitch, A_stretch จากนั้นเมื่อ Split แบบสุ่ม อาจเกิดกรณีที่ A อยู่ใน Test Set แต่ A_noise หรือ A_pitch ซึ่งสร้างมาจากไฟล์เดียวกันกลับอยู่ใน Train Set โมเดลจึงได้ฝึกกับข้อมูลที่แทบเหมือนกันกับข้อมูล Test ทำให้ผลประเมินสูงเกินจริง
+
+&emsp;**จุดที่ 2 — StandardScaler Fit บนข้อมูลรวม:** หากนำข้อมูล Train + Test + Val ทั้งหมดมา Fit Scaler พร้อมกัน ค่า Mean และ Standard Deviation ที่คำนวณได้จะมีข้อมูลของ Test ปนอยู่ด้วย โมเดลจึงทราบสถิติของข้อมูล Test ล่วงหน้าโดยอ้อม ซึ่งถือเป็น Leakage เช่นกัน
+
+**วิธีที่ผิด (เกิด Data Leakage):**
+
+| ลำดับ | ขั้นตอน | ปัญหาที่เกิด |
+|---|---|---|
+| 1 | โหลดไฟล์เสียงทั้งหมดพร้อมกัน | — |
+| 2 | Augment ข้อมูลทั้งหมด (Train + Test รวมกัน) | ไฟล์ Augment ของ Train ปะปนกับ Test |
+| 3 | Fit Scaler บนข้อมูลรวมทุกชุด | Scaler "เรียนรู้" สถิติของ Test ล่วงหน้า |
+| 4 | แบ่ง Train / Val / Test | แบ่งช้าเกินไป — Leakage เกิดขึ้นแล้ว |
+| 5 | Train โมเดล → วัด Accuracy | ผล Accuracy สูงเกินจริง ไม่สะท้อนประสิทธิภาพจริง |
+
+**วิธีที่ถูก (ป้องกัน Data Leakage ทุกจุด):**
+
+| ลำดับ | ขั้นตอน | เหตุผลที่สำคัญ |
+|---|---|---|
+| 1 | รวบรวม **File Paths** (ยังไม่โหลดข้อมูล) | ทำงานกับ Path เท่านั้น ไม่ยุ่งกับเนื้อหาไฟล์ |
+| 2 | **Split File Paths** → train_files / val_files / test_files | แบ่งก่อน ตั้งแต่ระดับ Path เพื่อรับประกันว่าไฟล์เดียวกันจะไม่อยู่คนละ Set |
+| 3 | **Augment เฉพาะ train_files** (สร้าง 3 ตัวอย่างต่อไฟล์) | val/test ไม่ถูก Augment ไม่มีทางที่ Augmented version จะปนเข้า Test |
+| 4 | โหลด val_files และ test_files แบบ **Original** (ไม่ Augment) | Test ใช้ข้อมูลจริงตามที่เป็น ไม่ผ่านการดัดแปลงใดๆ |
+| 5 | **Fit StandardScaler บน X_train เท่านั้น** | Scaler เรียนรู้เฉพาะสถิติของ Train ไม่รู้จัก Val/Test เลย |
+| 6 | **Transform** X_val และ X_test ด้วย Scaler ที่ Fit ไว้แล้ว | ใช้ค่า Mean/Std จาก Train มา Normalize Val/Test เท่านั้น |
+| 7 | **บันทึก Scaler** ไว้ในไฟล์ `.pkl` | ตอน Inference ต้อง Load Scaler เดิมมาใช้ ห้ามสร้าง Scaler ใหม่ |
+
+**ผลกระทบของการป้องกัน Data Leakage:**
+
+&emsp;เมื่อดำเนินการอย่างถูกต้องตามขั้นตอนข้างต้น ผล Accuracy ที่วัดได้บน Test Set จะสะท้อนประสิทธิภาพที่แท้จริงของโมเดลเมื่อนำไปใช้กับข้อมูลใหม่ที่ไม่เคยเห็นมาก่อน แม้ตัวเลข Accuracy อาจดูต่ำกว่าระบบที่มี Leakage แต่ถือว่าเชื่อถือได้และนำไปเปรียบเทียบกับงานวิจัยอื่นได้อย่างยุติธรรม ในโครงงานนี้ค่า Test Accuracy ที่วัดได้ประมาณ 68% จึงเป็นค่าที่เชื่อถือได้จริง ไม่ใช่ค่าที่ถูกเพิ่มขึ้นจาก Leakage
+
+---
 
 ### 3.2.4 Data Augmentation
 
+&emsp;Data Augmentation คือกระบวนการสร้างตัวอย่างข้อมูลเพิ่มเติมจากข้อมูลที่มีอยู่ โดยดัดแปลงในรูปแบบที่ยังคงความหมาย (Label) ไว้เหมือนเดิม เพื่อเพิ่มความหลากหลายของข้อมูล Train และช่วยให้โมเดล Generalize ได้ดีขึ้น
+
 **ตารางที่ 3.3 เทคนิค Data Augmentation ที่ใช้**
 
-| เทคนิค | วิธีการ | สูตร | ผลที่ต้องการ |
+| เทคนิค | วิธีการ | สูตร | จุดประสงค์ |
 |---|---|---|---|
-| **Gaussian Noise** | เพิ่ม Noise แบบสุ่ม | $x' = x + \alpha\mathcal{N}(0,1)$ | ทนต่อ Background Noise |
-| **Pitch Shifting** | ปรับ Pitch ±0.7 Semitones | `librosa.effects.pitch_shift` | ทนต่อความแตกต่างระหว่างผู้พูด |
-| **Time Stretching** | ขยาย/หดเวลา (rate=0.8) | `librosa.effects.time_stretch` | ทนต่อความเร็วในการพูด |
+| **Gaussian Noise** | เพิ่ม Noise แบบสุ่มเข้าสัญญาณ | $x' = x + \alpha\mathcal{N}(0,1)$ | ทำให้โมเดลทนต่อ Background Noise ในสภาพแวดล้อมจริง |
+| **Pitch Shifting** | ปรับระดับ Pitch ขึ้น/ลง ±0.7 Semitones | `librosa.effects.pitch_shift(n_steps=±0.7)` | ทำให้โมเดลทนต่อความแตกต่างของระดับเสียงระหว่างผู้พูดแต่ละคน |
+| **Time Stretching** | ยืดหรือหดเวลาของสัญญาณ (rate=0.8) | `librosa.effects.time_stretch(rate=0.8)` | ทำให้โมเดลทนต่อความเร็วในการพูดที่แตกต่างกัน |
 
-ผลลัพธ์: ไฟล์ต้นฉบับ 1 ไฟล์ → ตัวอย่าง 3 ตัวอย่าง (เพิ่ม Dataset 3 เท่า)
+&emsp;ผลลัพธ์ของ Augmentation คือไฟล์เสียง 1 ไฟล์จะถูกแปลงเป็น 3 ตัวอย่าง ได้แก่ ตัวอย่างที่เพิ่ม Noise / ตัวอย่างที่ปรับ Pitch / ตัวอย่างที่ยืดเวลา ทำให้ขนาดของ Train Set เพิ่มขึ้นเป็น 3 เท่า โดยไม่ต้องเก็บข้อมูลเพิ่ม สำคัญที่สุดคือ Augmentation ทำเฉพาะกับ **Train Set เท่านั้น** ตาม Anti-Data-Leakage Policy ที่อธิบายใน 3.2.3
+
+---
 
 ### 3.2.5 Normalization Strategy
+
+&emsp;ก่อนส่งข้อมูลเข้าโมเดล ต้อง Normalize Feature MFCC ให้อยู่ในช่วงที่เหมาะสม เพราะ MFCC แต่ละ Coefficient มีช่วงค่าที่แตกต่างกันมาก เช่น Coefficient ที่ 1 อาจมีค่าในช่วง -200 ถึง +50 ในขณะที่ Coefficient ที่ 10 อาจมีค่าในช่วง -30 ถึง +30 หากไม่ Normalize โมเดลจะให้ความสำคัญกับ Coefficient ที่มีค่าสูงกว่ามากเกินไป ทำให้เรียนรู้ได้ช้าและ Converge ได้ยาก
+
+&emsp;โครงงานนี้ใช้ **StandardScaler** ซึ่งแปลงข้อมูลให้มีค่าเฉลี่ย (Mean) = 0 และ ส่วนเบี่ยงเบนมาตรฐาน (Std) = 1 ตามสูตร:
+
+$$z = \frac{x - \mu}{\sigma}$$
+
+โดยที่ $\mu$ คือค่าเฉลี่ยของ Train Set และ $\sigma$ คือ Standard Deviation ของ Train Set
+
+**กระบวนการ Normalization ที่ถูกต้อง:**
 
 ```python
 scaler = StandardScaler()
 N, T, F = X_train.shape
+# N = จำนวนตัวอย่าง, T = Time Steps (130), F = Features (40)
 
-# Fit เฉพาะบน Train (ห้าม Fit ซ้ำ!)
+# ขั้นที่ 1: Reshape จาก (N, T, F) เป็น (N, T×F) เพื่อให้ Scaler คำนวณได้
+# จากนั้น fit_transform จะ:
+#   - คำนวณ Mean และ Std ของแต่ละ Feature จาก Train เท่านั้น
+#   - Normalize ข้อมูล Train ด้วยค่า Mean/Std ที่คำนวณได้
+#   - Reshape กลับเป็น (N, T, F)
 X_train = scaler.fit_transform(X_train.reshape(N, -1)).reshape(N, T, F)
 
-# Transform ด้วย Train statistics เท่านั้น
-X_val  = scaler.transform(X_val.reshape(-1, T*F)).reshape(-1, T, F)
+# ขั้นที่ 2: Normalize Val ด้วยค่า Mean/Std จาก Train (ห้าม fit ใหม่!)
+# scaler.transform ใช้ค่า Mean/Std ที่เรียนรู้จาก Train มา Apply กับ Val
+X_val = scaler.transform(X_val.reshape(-1, T*F)).reshape(-1, T, F)
+
+# ขั้นที่ 3: Normalize Test ด้วยค่า Mean/Std จาก Train เช่นกัน
 X_test = scaler.transform(X_test.reshape(-1, T*F)).reshape(-1, T, F)
 
-# บันทึก Scaler ไว้ใช้ตอน Inference
+# ขั้นที่ 4: บันทึก Scaler ไว้ใช้ตอน Inference
+# เมื่อต้องการทดสอบไฟล์เสียงใหม่ ต้อง Load Scaler นี้มา Transform ก่อนเสมอ
 with open('scaler.pkl', 'wb') as f:
-    pickle.dump(scaler, f)
+    pickle.dump(scaler, f)  # บันทึกด้วย Pickle เพื่อ Load กลับมาใช้ได้
 ```
+
+&emsp;เหตุผลที่ต้อง Fit Scaler บน Train Set เท่านั้น เพราะหากนำ Val หรือ Test มา Fit ด้วย ค่า Mean และ Std จะถูกกำหนดจากข้อมูล Test ทำให้โมเดลทราบสถิติของข้อมูลทดสอบล่วงหน้า ซึ่งเป็น Data Leakage รูปแบบหนึ่ง นอกจากนี้การบันทึก Scaler ไว้ในไฟล์ `.pkl` มีความสำคัญอย่างยิ่ง เพราะเมื่อต้องการทำนายอารมณ์จากไฟล์เสียงใหม่ในอนาคต จะต้อง Normalize ด้วยค่า Mean/Std ชุดเดิมกันกับตอน Train เท่านั้น หาก Normalize ด้วยค่าใหม่ที่คำนวณจากไฟล์เสียงเพียงไฟล์เดียว ผลการทำนายจะผิดพลาดอย่างมาก
 
 ## 3.3 สถาปัตยกรรมโมเดล CNN + Bi-LSTM
 
-```
-Input Shape: (Batch_Size, 130 time_steps, 40 features)
-                          │
-          ┌───────────────┴────────────────────┐
-          │         CNN Block 1                │
-          │  Conv1D(256, kernel=5, ReLU)        │
-          │  BatchNormalization                 │
-          │  MaxPooling1D(pool=2)              │
-          │  Dropout(0.3)                      │
-          └───────────────┬────────────────────┘
-                          │ (Batch, 65, 256)
-          ┌───────────────┴────────────────────┐
-          │         CNN Block 2                │
-          │  Conv1D(128, kernel=5, ReLU)        │
-          │  BatchNormalization                 │
-          │  MaxPooling1D(pool=2)              │
-          │  Dropout(0.3)                      │
-          └───────────────┬────────────────────┘
-                          │ (Batch, 32, 128)
-          ┌───────────────┴────────────────────┐
-          │      Bidirectional LSTM 1          │
-          │  BiLSTM(128, return_seq=True)      │
-          │  Dropout(0.3)                      │
-          └───────────────┬────────────────────┘
-                          │ (Batch, 32, 256)
-          ┌───────────────┴────────────────────┐
-          │      Bidirectional LSTM 2          │
-          │  BiLSTM(64)                        │
-          │  Dropout(0.3)                      │
-          └───────────────┬────────────────────┘
-                          │ (Batch, 128)
-          ┌───────────────┴────────────────────┐
-          │         Dense Layers               │
-          │  Dense(64, ReLU, L2=0.001)         │
-          │  Dropout(0.3)                      │
-          │  Dense(5, Softmax)                 │
-          └───────────────┬────────────────────┘
-                          │
-          Output: [Angry, Happy, Sad, Neutral, Surprise]
-                  (ความน่าจะเป็นของแต่ละอารมณ์ รวมกัน = 1.0)
-```
+&emsp;โมเดลที่ใช้ในโครงงานนี้เป็นสถาปัตยกรรมแบบ Hybrid ที่ผสมผสานระหว่าง Convolutional Neural Network (CNN) และ Bidirectional Long Short-Term Memory (Bi-LSTM) โดยมีทั้งหมด 5 กลุ่มชั้น (Layer Group) ทำงานต่อเนื่องกันเป็น Sequential Pipeline โดยมีจำนวน Parameter ที่สามารถเรียนรู้ได้ทั้งหมด **653,061 ตัว** รายละเอียดของแต่ละชั้นมีดังนี้
 
-**Total Parameters: ~653,061**
+**กลุ่มที่ 1 — Input Layer**
 
-**เหตุผลในการเลือกสถาปัตยกรรมนี้:**
-- CNN Block สกัด Local Temporal Pattern (เช่น การเปลี่ยน Pitch ระยะสั้น)
-- Bidirectional LSTM จับ Long-term Dependency (เช่น รูปแบบอารมณ์ที่กระจายทั้งประโยค)
-- การรวมกันของทั้งสองชั้นให้ Accuracy สูงสุดสำหรับงาน SER ตามงานวิจัยของ Zhao et al. (2019)
+&emsp;ข้อมูล Input ที่ส่งเข้าโมเดลมีรูปร่าง **(Batch Size, 130 Time Steps, 40 Features)** โดย 130 Time Steps คือจำนวน Frame ที่ได้จาก MFCC เมื่อแบ่งสัญญาณเสียง 3 วินาทีด้วย Hop Length มาตรฐาน และ 40 Features คือจำนวน MFCC Coefficients ที่สกัดออกมาจากแต่ละ Frame ซึ่งแสดงถึงลักษณะเฉพาะของสเปกตรัมเสียงในแต่ละช่วงเวลา
+
+**กลุ่มที่ 2 — CNN Block 1 (สกัด Local Pattern ความละเอียดสูง)**
+
+&emsp;ชั้นแรกเป็น Conv1D ที่มี 256 Filter ขนาด Kernel 5 และ Activation Function เป็น ReLU ทำหน้าที่สแกนลำดับเวลา 5 Time Steps ติดต่อกันพร้อมกัน 256 รูปแบบ เพื่อตรวจจับ Local Temporal Pattern เช่น การเปลี่ยนแปลงของ Pitch ในช่วงสั้นๆ หรือลักษณะ Onset ของพยัญชนะ ผลลัพธ์มีรูปร่าง (Batch, 130, 256) จากนั้นผ่าน BatchNormalization เพื่อปรับ Distribution ของ Activation ให้เสถียรและเร่งการ Converge ตามด้วย MaxPooling1D ขนาด Pool 2 ซึ่งย่อ Time Steps จาก 130 เป็น 65 และเลือกเฉพาะ Pattern ที่โดดเด่นที่สุดในแต่ละช่วง สุดท้ายผ่าน Dropout อัตรา 30% เพื่อสุ่มปิด Neuron ระหว่าง Training ป้องกัน Overfitting ผลลัพธ์ออกจาก Block นี้มีรูปร่าง **(Batch, 65, 256)**
+
+**กลุ่มที่ 3 — CNN Block 2 (สกัด High-level Pattern)**
+
+&emsp;ชั้นที่สองเป็น Conv1D ที่มี 128 Filter ขนาด Kernel 5 ทำงานต่อจาก Block แรก โดยรับ Feature Map ขนาด (65, 256) มาสกัด Pattern ระดับสูงขึ้นที่ครอบคลุมช่วงเวลายาวกว่า เพราะแต่ละ Time Step ใน Block นี้แทน 2 Time Step ของสัญญาณต้นฉบับแล้ว จำนวน Filter ลดลงจาก 256 เป็น 128 เพื่อบีบอัดข้อมูลและคงเฉพาะ Pattern ที่สำคัญ หลังผ่าน BatchNormalization, MaxPooling1D (Pool=2) และ Dropout 30% ผลลัพธ์มีรูปร่าง **(Batch, 32, 128)** ซึ่งเป็น Compressed Representation ที่มี Semantic สูง พร้อมส่งต่อให้ LSTM
+
+**กลุ่มที่ 4 — Bidirectional LSTM Block 1 (จับ Sequential Dependency สองทิศทาง)**
+
+&emsp;ชั้นที่สามเป็น Bidirectional LSTM ที่มี 128 Hidden Units ต่อทิศทาง (รวม 256 หน่วย) โดยรับ Sequence ขนาด (32, 128) จาก CNN แล้วอ่านข้อมูลพร้อมกัน 2 ทิศทาง ได้แก่ ทิศทางปกติจากซ้ายไปขวา (Forward LSTM) และทิศทางย้อนกลับจากขวาไปซ้าย (Backward LSTM) การอ่านสองทิศทางทำให้โมเดลเข้าใจบริบทของเสียงพูดได้ครบถ้วน เช่น สามารถรับรู้ว่าอารมณ์ที่ปรากฏช่วงกลางประโยคมีความสัมพันธ์กับ Intonation ที่อยู่ท้ายประโยคอย่างไร ตั้งค่า `return_sequences=True` เพื่อส่ง Hidden State ของทุก Time Step ต่อไปยัง LSTM ชั้นถัดไป หลัง Dropout 30% ผลลัพธ์มีรูปร่าง **(Batch, 32, 256)**
+
+**กลุ่มที่ 5 — Bidirectional LSTM Block 2 (สรุป Context ทั้งหมด)**
+
+&emsp;ชั้นที่สี่เป็น Bidirectional LSTM ที่มี 64 Hidden Units ต่อทิศทาง (รวม 128 หน่วย) ทำหน้าที่สรุป Sequential Context จาก 32 Time Steps ที่ผ่านมาทั้งหมดให้เป็น Vector เดียวขนาด 128 มิติ โดยไม่ได้ตั้งค่า `return_sequences` ดังนั้นจึงส่งออกเฉพาะ Hidden State ของ Time Step สุดท้ายเท่านั้น ซึ่งสรุป "สาระสำคัญ" ของทั้ง Sequence เสียงไว้ หลัง Dropout 30% ผลลัพธ์มีรูปร่าง **(Batch, 128)** ซึ่งเป็น Fixed-size Emotion Representation Vector
+
+**กลุ่มที่ 6 — Dense Layers (จำแนกอารมณ์)**
+
+&emsp;ชั้นสุดท้ายเป็น Fully Connected Layers 2 ชั้น ชั้นแรก Dense 64 หน่วยพร้อม ReLU Activation และ L2 Regularization (λ=0.001) ทำหน้าที่แปลง Emotion Representation Vector ขนาด 128 มิติให้เป็น Feature Space ขนาด 64 มิติที่เหมาะสมกับการจำแนกอารมณ์ L2 Regularization เพิ่มค่า Penalty เข้า Loss Function เพื่อป้องกันไม่ให้ Weight มีขนาดใหญ่เกินไป หลัง Dropout 30% จะผ่าน Dense 5 หน่วยพร้อม Softmax Activation ซึ่งแปลง Logits ให้เป็น Probability Distribution โดยผลรวมของ Probability ทั้ง 5 อารมณ์จะเท่ากับ 1.0 เสมอ
+
+**ตารางที่ 3.4 สรุปสถาปัตยกรรมชั้นต่อชั้น**
+
+| กลุ่ม | Layer | Output Shape | Parameters | บทบาทหน้าที่ |
+|---|---|---|---|---|
+| Input | — | (Batch, 130, 40) | 0 | รับ MFCC Feature Sequence |
+| CNN Block 1 | Conv1D(256, k=5) + BN + Pool + Drop | (Batch, 65, 256) | 52,480 | สกัด Local Temporal Pattern |
+| CNN Block 2 | Conv1D(128, k=5) + BN + Pool + Drop | (Batch, 32, 128) | 164,480 | สกัด High-level Pattern |
+| BiLSTM 1 | Bidirectional LSTM(128, seq=True) + Drop | (Batch, 32, 256) | 263,168 | จับ Sequential Dependency 2 ทิศทาง |
+| BiLSTM 2 | Bidirectional LSTM(64) + Drop | (Batch, 128) | 164,352 | สรุป Context ทั้ง Sequence |
+| Dense | Dense(64, L2) + Drop + Dense(5, Softmax) | (Batch, 5) | 8,581 | จำแนกออกเป็น 5 อารมณ์ |
+| **รวม** | | | **653,061** | |
+
+**เหตุผลในการเลือกสถาปัตยกรรม Hybrid CNN + Bi-LSTM:**
+
+&emsp;โครงสร้าง Hybrid นี้ถูกเลือกเพราะงานวิจัยของ Zhao et al. (2019) แสดงให้เห็นว่า CNN สามารถสกัด Local Feature จากสัญญาณ MFCC ได้อย่างมีประสิทธิภาพ ในขณะที่ LSTM จัดการ Sequential Dependency ระยะยาวได้ดี ซึ่งทั้งสองด้านมีความจำเป็นสำหรับงาน Speech Emotion Recognition เพราะอารมณ์ในเสียงพูดมีทั้งลักษณะ Local (การเปลี่ยนแปลงฉับพลัน) และลักษณะ Global (รูปแบบที่กระจายตลอดประโยค) การใช้ Bidirectional แทน Unidirectional LSTM ช่วยเพิ่ม Accuracy เนื่องจากการรับรู้ Context ของเสียงพูดต้องการข้อมูลจากทั้งอดีตและอนาคตในลำดับเสียงพร้อมกัน
 
 ## 3.4 การกำหนด Training Configuration
 
