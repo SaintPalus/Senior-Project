@@ -1,4 +1,4 @@
-"""
+﻿"""
 wav2vec2_pipeline.py
 ====================
 Feature extraction + Training ด้วย Wav2Vec2 (Facebook XLSR-53)
@@ -38,7 +38,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import accuracy_score, f1_score, classification_report
 
-BASE_DIR   = r"C:\Users\Administrator\Desktop\66070131_SeniorP1\SeniorP1"
+BASE_DIR   = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATASET_DIR = os.path.join(BASE_DIR, "dataset")
 W2V_FEAT   = os.path.join(BASE_DIR, "extracted_features_w2v")   # แยกจาก mel-spec
 MODEL_DIR  = os.path.join(BASE_DIR, "models")

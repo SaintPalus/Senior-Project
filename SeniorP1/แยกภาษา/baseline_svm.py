@@ -1,4 +1,4 @@
-"""
+﻿"""
 baseline_svm.py
 ===============
 เปรียบเทียบ Classical SVM + MFCC กับ ResNet (Deep Learning)
@@ -18,7 +18,7 @@ warnings.filterwarnings('ignore')
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
 sys.stdout.reconfigure(encoding='utf-8')
 
-BASE_DIR = r"C:\Users\Administrator\Desktop\66070131_SeniorP1\SeniorP1"
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FEAT_DIR = os.path.join(BASE_DIR, "extracted_features")
 OUT_DIR  = os.path.join(BASE_DIR, "results", "baseline_comparison")
 os.makedirs(OUT_DIR, exist_ok=True)

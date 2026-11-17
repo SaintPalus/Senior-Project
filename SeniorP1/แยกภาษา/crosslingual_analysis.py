@@ -1,4 +1,4 @@
-"""
+﻿"""
 crosslingual_analysis.py
 ========================
 วิเคราะห์ความเหมือน/แตกต่างของอารมณ์ข้ามภาษา
@@ -30,7 +30,7 @@ from matplotlib.patches import FancyArrowPatch
 from scipy.spatial.distance import cosine, cdist
 from scipy.stats import f_oneway
 
-BASE_DIR = r"C:\Users\Administrator\Desktop\66070131_SeniorP1\SeniorP1"
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FEAT_DIR = os.path.join(BASE_DIR, "extracted_features")
 OUT_DIR  = os.path.join(BASE_DIR, "results", "crosslingual")
 os.makedirs(OUT_DIR, exist_ok=True)

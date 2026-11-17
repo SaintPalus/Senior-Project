@@ -1,4 +1,4 @@
-"""
+﻿"""
 web_demo.py
 ===========
 Web Interface สำหรับ Speech Emotion Recognition
@@ -33,7 +33,7 @@ sys.stdout.reconfigure(encoding='utf-8')
 import torch
 import torch.nn as nn
 
-BASE_DIR  = r"C:\Users\Administrator\Desktop\66070131_SeniorP1\SeniorP1"
+BASE_DIR  = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MODEL_DIR = os.path.join(BASE_DIR, "models")
 
 LANGUAGES  = ['Chinese', 'Japan', 'Korean', 'Thai', 'English']

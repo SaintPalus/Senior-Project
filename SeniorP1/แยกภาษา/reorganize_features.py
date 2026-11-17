@@ -1,4 +1,4 @@
-"""
+﻿"""
 reorganize_features.py
 ======================
 จัดระเบียบ .npy ที่รวมกันอยู่ใน extracted_features/ แยกเป็นโฟลเดอร์ต่อภาษา
@@ -34,7 +34,7 @@ sys.stdout.reconfigure(encoding='utf-8')
 # ==========================================
 # CONFIG
 # ==========================================
-BASE_DIR    = r"C:\Users\Administrator\Desktop\66070131_SeniorP1\SeniorP1"
+BASE_DIR    = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OLD_DIR     = os.path.join(BASE_DIR, "extracted_features")      # flat folder เดิม
 FEATURE_DIR = os.path.join(BASE_DIR, "extracted_features")      # root เดิม (จะสร้าง subfolder)
 DATASET_DIR = os.path.join(BASE_DIR, "dataset")

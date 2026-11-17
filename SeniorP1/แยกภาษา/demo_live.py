@@ -1,4 +1,4 @@
-"""
+﻿"""
 demo_live.py
 ============
 Live Demo — อัดเสียงจากไมโครโฟน แล้ว predict อารมณ์ด้วย PyTorch ResNet
@@ -22,7 +22,7 @@ warnings.filterwarnings('ignore')
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
 sys.stdout.reconfigure(encoding='utf-8')
 
-BASE_DIR   = r"C:\Users\Administrator\Desktop\66070131_SeniorP1\SeniorP1"
+BASE_DIR   = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MODEL_DIR  = os.path.join(BASE_DIR, "models")
 
 LANGUAGES  = ['Chinese', 'Japan', 'Korean', 'Thai', 'English']

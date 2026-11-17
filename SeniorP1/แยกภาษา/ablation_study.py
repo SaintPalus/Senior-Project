@@ -1,4 +1,4 @@
-"""
+﻿"""
 ablation_study.py
 =================
 เปรียบเทียบผลกระทบของ augmentation ต่อ accuracy
@@ -27,7 +27,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
 
-BASE_DIR = r"C:\Users\Administrator\Desktop\66070131_SeniorP1\SeniorP1"
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FEAT_DIR = os.path.join(BASE_DIR, "extracted_features")
 OUT_DIR  = os.path.join(BASE_DIR, "results", "ablation")
 os.makedirs(OUT_DIR, exist_ok=True)

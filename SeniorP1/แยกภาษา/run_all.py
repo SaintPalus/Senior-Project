@@ -1,4 +1,4 @@
-"""
+﻿"""
 run_all.py
 ==========
 รันทุกขั้นตอนอัตโนมัติ ตั้งแต่ต้นจนจบ (International Competition Edition)
@@ -36,7 +36,7 @@ import subprocess
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
 sys.stdout.reconfigure(encoding='utf-8')
 
-BASE_DIR   = r"C:\Users\Administrator\Desktop\66070131_SeniorP1\SeniorP1"
+BASE_DIR   = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SCRIPT_DIR = os.path.join(BASE_DIR, "แยกภาษา")
 PYTHON     = os.path.join(os.path.dirname(BASE_DIR), "Anaconda", "python.exe")
 

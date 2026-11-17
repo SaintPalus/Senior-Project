@@ -1,4 +1,4 @@
-"""
+﻿"""
 Data Pipeline: Speech Emotion Recognition — Per-Language Models
 ================================================================
 Strategy : แยก Train โมเดลทีละภาษา → เก็บเป็น 5 โมเดล
@@ -47,7 +47,7 @@ sys.stdout.reconfigure(encoding='utf-8')
 # ==========================================
 # ⚙️ CONFIG
 # ==========================================
-BASE_DIR    = r"C:\Users\Administrator\Desktop\66070131_SeniorP1\SeniorP1"
+BASE_DIR    = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATASET_DIR = os.path.join(BASE_DIR, "dataset")
 FEATURE_DIR = os.path.join(BASE_DIR, "extracted_features")   # แยก subfolder ต่อภาษา
 MODEL_DIR   = os.path.join(BASE_DIR, "models")               # แยกไฟล์ต่อภาษา

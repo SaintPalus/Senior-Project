@@ -1,4 +1,4 @@
-"""
+﻿"""
 evaluate.py — Auto Evaluation for Speech Emotion Recognition
 =============================================================
 ทดสอบ accuracy จริงของทุกโมเดลอัตโนมัติ พร้อม:
@@ -39,7 +39,7 @@ from sklearn.metrics import (
 # ==========================================
 # CONFIG — ต้องตรงกับ data_pipeline.py
 # ==========================================
-BASE_DIR   = r"C:\Users\Administrator\Desktop\66070131_SeniorP1\SeniorP1"
+BASE_DIR   = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MODEL_DIR  = os.path.join(BASE_DIR, "models")
 RESULT_DIR = os.path.join(BASE_DIR, "results")
 

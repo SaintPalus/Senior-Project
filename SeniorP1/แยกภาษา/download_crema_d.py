@@ -1,4 +1,4 @@
-"""
+﻿"""
 download_crema_d.py
 ===================
 ดาวน์โหลด CREMA-D dataset สำหรับ English emotion recognition
@@ -17,7 +17,7 @@ import soundfile as sf
 
 sys.stdout.reconfigure(encoding='utf-8')
 
-BASE_DIR    = r"C:\Users\Administrator\Desktop\66070131_SeniorP1\SeniorP1"
+BASE_DIR    = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CREMA_DIR   = os.path.join(BASE_DIR, "dataset", "English", "crema_d")
 os.makedirs(CREMA_DIR, exist_ok=True)
 

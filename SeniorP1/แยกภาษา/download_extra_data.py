@@ -1,4 +1,4 @@
-"""
+﻿"""
 download_extra_data.py
 ======================
 ขยาย dataset สำหรับ Korean และ Japanese
@@ -23,7 +23,7 @@ from collections import Counter
 sys.stdout.reconfigure(encoding='utf-8')
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
 
-BASE_DIR  = r"C:\Users\Administrator\Desktop\66070131_SeniorP1\SeniorP1"
+BASE_DIR  = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 KO_AUG    = os.path.join(BASE_DIR, "dataset", "Korean",  "augmented")
 JA_AUG    = os.path.join(BASE_DIR, "dataset", "Japan",   "augmented")
 os.makedirs(KO_AUG, exist_ok=True)

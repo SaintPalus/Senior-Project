@@ -23,8 +23,9 @@ SeniorP1/extracted_features/
 asian_emotion_cnn_model.h5
 Backup Model/
 
-# Encoders / Scalers
+# Encoders / Scalers (allow models/ directory)
 **/*.pkl
+!SeniorP1/models/*.pkl
 
 # Archives & Installers
 **/*.rar
