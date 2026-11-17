@@ -155,6 +155,8 @@ def predict_emotion(audio_path, lang_choice, model_type='mel'):
             return None, None, None, "ไม่พบ lang_detector.pkl — รัน language_detector.py ก่อน"
         feat = mel.flatten().reshape(1, -1)
         lang = det.predict(feat)[0]
+        if isinstance(lang, (int, np.integer)) or (isinstance(lang, str) and str(lang).isdigit()):
+            lang = LANGUAGES[int(lang)]
     else:
         # แปลง display name → key
         lang = next((k for k, v in LANG_LABEL.items() if v == lang_choice), lang_choice)
